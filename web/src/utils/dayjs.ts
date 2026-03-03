@@ -10,8 +10,8 @@ const DEFAULT_TZ = 'Asia/Shanghai'
 // 默认使用北京时间（UTC+8）
 dayjs.tz.setDefault(DEFAULT_TZ)
 
-const wrapped = ((...args: any[]) => {
-  const d = args.length > 0 ? (dayjs as any)(...args) : dayjs()
+const wrapped = ((...args: Parameters<typeof dayjs>) => {
+  const d = args.length > 0 ? dayjs(...args) : dayjs()
   return d.tz(DEFAULT_TZ)
 }) as typeof dayjs
 

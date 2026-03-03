@@ -102,9 +102,6 @@ func (w *Watcher) Stop() {
 
 // stripManagedFields 去除 managedFields 减少内存占用
 func stripManagedFields(obj interface{}) (interface{}, error) {
-	type metaAccessor interface {
-		SetManagedFields([]interface{})
-	}
 	// managedFields 对异常检测无用，通过 Transform 清理
 	// 实际 Transform 中使用 metav1.ObjectMeta 接口
 	return obj, nil

@@ -155,10 +155,17 @@ function AppLayout() {
     document.title = slogan ? `${title} - ${slogan}` : title
   }, [branding])
 
-  const has = (perm: string) => hasPermission(permissions, perm)
-
   const menuItems = useMemo(() => {
-    const items: any[] = [
+    const has = (perm: string) => hasPermission(permissions, perm)
+
+    type MenuItem = {
+      key: string
+      icon: React.ReactNode
+      label: React.ReactNode
+      children?: MenuItem[]
+    }
+
+    const items: MenuItem[] = [
       {
         key: '/',
         icon: <DashboardOutlined />,
@@ -191,7 +198,7 @@ function AppLayout() {
     }
 
     // 系统管理子菜单
-    const settingsChildren: any[] = []
+    const settingsChildren: MenuItem[] = []
 
     if (has('user:manage')) {
       settingsChildren.push({

@@ -55,8 +55,9 @@ export default function ClusterList() {
       queryClient.invalidateQueries({ queryKey: ['clusters'] })
       message.success('集群添加成功')
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.error || '创建失败')
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } }
+      message.error(e?.response?.data?.error || '创建失败')
     },
   })
 
@@ -68,8 +69,9 @@ export default function ClusterList() {
       queryClient.invalidateQueries({ queryKey: ['clusters'] })
       message.success('集群更新成功')
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.error || '更新失败')
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } }
+      message.error(e?.response?.data?.error || '更新失败')
     },
   })
 
@@ -79,8 +81,9 @@ export default function ClusterList() {
       message.success('集群已删除')
       queryClient.invalidateQueries({ queryKey: ['clusters'] })
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.error || '删除失败')
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } }
+      message.error(e?.response?.data?.error || '删除失败')
     },
   })
 
@@ -90,8 +93,9 @@ export default function ClusterList() {
       message.success('集群已启用')
       queryClient.invalidateQueries({ queryKey: ['clusters'] })
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.error || '启用失败')
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } }
+      message.error(e?.response?.data?.error || '启用失败')
     },
   })
 
@@ -101,8 +105,9 @@ export default function ClusterList() {
       message.success('集群已禁用')
       queryClient.invalidateQueries({ queryKey: ['clusters'] })
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.error || '禁用失败')
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } }
+      message.error(e?.response?.data?.error || '禁用失败')
     },
   })
 

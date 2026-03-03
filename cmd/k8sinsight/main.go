@@ -50,7 +50,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "初始化日志失败: %v\n", err)
 		os.Exit(1)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	logger.Info("K8sInsight 启动中...",
 		zap.Int("port", cfg.Server.Port),

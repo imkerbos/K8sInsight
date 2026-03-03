@@ -18,31 +18,43 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+const UNAUTHENTICATED: AuthState = { user: null, permissions: [], loading: false, authenticated: false }
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    permissions: [],
-    loading: true,
-    authenticated: false,
+  const [state, setState] = useState<AuthState>(() => {
+    const token = localStorage.getItem('accessToken')
+    if (!token) return UNAUTHENTICATED
+    return {
+      user: null,
+      permissions: [],
+      loading: true,
+      authenticated: false,
+    }
   })
 
   // 启动时检查是否已有有效 token
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
     if (!token) {
-      setState({ user: null, permissions: [], loading: false, authenticated: false })
       return
     }
 
+    let cancelled = false
     getMe()
       .then((user) => {
-        setState({ user, permissions: user.permissions ?? [], loading: false, authenticated: true })
+        if (!cancelled) {
+          setState({ user, permissions: user.permissions ?? [], loading: false, authenticated: true })
+        }
       })
       .catch(() => {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
-        setState({ user: null, permissions: [], loading: false, authenticated: false })
+        if (!cancelled) {
+          setState(UNAUTHENTICATED)
+        }
       })
+
+    return () => { cancelled = true }
   }, [])
 
   const login = useCallback(async (username: string, password: string) => {
@@ -73,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
-    setState({ user: null, permissions: [], loading: false, authenticated: false })
+    setState(UNAUTHENTICATED)
   }, [])
 
   const refreshUser = useCallback(async () => {
@@ -92,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) {

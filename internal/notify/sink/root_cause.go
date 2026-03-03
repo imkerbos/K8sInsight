@@ -2,7 +2,6 @@ package sink
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/kerbos/k8sinsight/internal/detector"
 )
@@ -99,11 +98,4 @@ func inferRootCause(event detector.AnomalyEvent) rootCauseResult {
 			},
 		}
 	}
-}
-
-func joinSuggestions(lines []string) string {
-	if len(lines) == 0 {
-		return "-"
-	}
-	return strings.Join(lines, "；")
 }
