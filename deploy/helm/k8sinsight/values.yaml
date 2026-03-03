@@ -1,0 +1,88 @@
+global:
+  imagePullSecrets: []
+
+backend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/imkerbos/k8sinsight-backend
+    tag: latest
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8080
+  config:
+    accessTokenTTL: 2h
+    refreshTokenTTL: 168h
+    logLevel: info
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/imkerbos/k8sinsight-frontend
+    tag: latest
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+    port: 80
+
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "18"
+    pullPolicy: Always
+  auth:
+    username: k8sinsight
+    password: change-me-strong-password
+    database: k8sinsight
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+auth:
+  jwtSecret: change-me-super-secret
+  defaultAdminPassword: change-me-admin-password
+
+exposure:
+  mode: gateway # gateway | istio
+
+gateway:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: k8sinsight.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+istio:
+  enabled: false
+  hosts:
+    - k8sinsight.local
+  # 仅创建 VirtualService，不创建 Gateway 资源；默认 mesh。
+  gateways:
+    - mesh

@@ -1,0 +1,16 @@
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache git
+
+# 安装 Air 热更新工具
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# 预下载依赖（source 由 volume 挂载覆盖，但此层缓存 Go 模块）
+COPY go.mod go.sum ./
+RUN go mod download
+
+EXPOSE 8080
+
+CMD ["air", "-c", ".air.toml"]

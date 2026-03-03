@@ -1,0 +1,54 @@
+# Binaries
+/bin/
+/k8sinsight
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+*.test
+*.out
+cover.html
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (local overrides)
+configs/config.local.yaml
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Docker（.env 含密码，只提交 .env.example）
+deploy/docker/.env
+deploy/docker/.env.prod
+
+# Air 热更新
+.air.toml
+tmp/
+build-errors.log
+
+# AIDE
+CLAUDE.md
+AGENTS.md
+CODEX.md
+AGENT.md
+
+# AI Assistant local context/config
+.claude/
+.codex/
+.aider*
+.cursor/

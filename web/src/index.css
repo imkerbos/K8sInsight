@@ -1,0 +1,39 @@
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* 登录页暗色输入框适配 */
+.login-dark-input .ant-input,
+.login-dark-input .ant-input-password .ant-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+.login-dark-input .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.login-dark-input .ant-input-prefix {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.login-dark-input .ant-input-suffix .anticon {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.login-dark-input .ant-input-affix-wrapper {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.login-dark-input .ant-input-affix-wrapper:hover,
+.login-dark-input .ant-input-affix-wrapper:focus,
+.login-dark-input .ant-input-affix-wrapper-focused {
+  border-color: rgba(24, 144, 255, 0.6) !important;
+}
+
+.login-dark-input .ant-form-item-explain-error {
+  color: #ff6b6b;
+}

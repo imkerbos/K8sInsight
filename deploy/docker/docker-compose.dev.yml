@@ -1,0 +1,40 @@
+# docker-compose.dev.yml — 开发覆盖层（后端 Air + 前端 Vite HMR）
+# 用法: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  backend:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile.dev
+    restart: "no"
+    volumes:
+      - ../../:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      - K8SINSIGHT_DB_HOST=${DB_HOST}
+      - K8SINSIGHT_DB_PORT=${DB_PORT:-5432}
+      - K8SINSIGHT_DB_USER=${DB_USER}
+      - K8SINSIGHT_DB_PASSWORD=${DB_PASSWORD}
+      - K8SINSIGHT_DB_DBNAME=${DB_DBNAME:-k8sinsight}
+      - K8SINSIGHT_SERVER_JWTSECRET=${JWT_SECRET}
+      - K8SINSIGHT_SERVER_DEFAULTADMINPASSWORD=${DEFAULT_ADMIN_PASSWORD:-k8sinsight}
+      - K8SINSIGHT_SERVER_PORT=8080
+
+  frontend:
+    build:
+      context: ../../web
+      dockerfile: ../deploy/docker/Dockerfile.frontend-dev
+    restart: "no"
+    ports: !override
+      - "${FRONTEND_PORT:-3500}:5173"
+    volumes:
+      - ../../web:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      - VITE_API_TARGET=http://backend:8080
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  frontend-node-modules:

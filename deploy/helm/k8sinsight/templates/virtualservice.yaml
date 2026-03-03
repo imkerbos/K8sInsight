@@ -1,0 +1,23 @@
+{{- if and (eq .Values.exposure.mode "istio") .Values.istio.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "k8sinsight.fullname" . }}
+  labels:
+    {{- include "k8sinsight.labels" . | nindent 4 }}
+spec:
+  hosts:
+    {{- range .Values.istio.hosts }}
+    - {{ . | quote }}
+    {{- end }}
+  gateways:
+    {{- range .Values.istio.gateways }}
+    - {{ . | quote }}
+    {{- end }}
+  http:
+    - route:
+        - destination:
+            host: frontend
+            port:
+              number: {{ .Values.frontend.service.port }}
+{{- end }}

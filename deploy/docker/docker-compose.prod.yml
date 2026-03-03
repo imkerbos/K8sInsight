@@ -1,0 +1,48 @@
+name: k8sinsight-prod
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: k8sinsight-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_DBNAME}
+    volumes:
+      - k8sinsight-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_DBNAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ${BACKEND_IMAGE:-k8sinsight-backend:latest}
+    container_name: k8sinsight-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-10080}:8080"
+    environment:
+      - K8SINSIGHT_DB_HOST=postgres
+      - K8SINSIGHT_DB_PORT=5432
+      - K8SINSIGHT_DB_USER=${DB_USER}
+      - K8SINSIGHT_DB_PASSWORD=${DB_PASSWORD}
+      - K8SINSIGHT_DB_DBNAME=${DB_DBNAME}
+      - K8SINSIGHT_SERVER_JWTSECRET=${JWT_SECRET}
+      - K8SINSIGHT_SERVER_DEFAULTADMINPASSWORD=${DEFAULT_ADMIN_PASSWORD}
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-k8sinsight-frontend:latest}
+    container_name: k8sinsight-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3500}:80"
+
+volumes:
+  k8sinsight-pg-data:

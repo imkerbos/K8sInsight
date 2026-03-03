@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k8sinsight.fullname" . }}-backend
+  labels:
+    {{- include "k8sinsight.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: K8SINSIGHT_DB_HOST
+              value: postgres
+            - name: K8SINSIGHT_DB_PORT
+              value: "5432"
+            - name: K8SINSIGHT_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sinsight.fullname" . }}-secret
+                  key: dbUsername
+            - name: K8SINSIGHT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sinsight.fullname" . }}-secret
+                  key: dbPassword
+            - name: K8SINSIGHT_DB_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sinsight.fullname" . }}-secret
+                  key: dbName
+            - name: K8SINSIGHT_SERVER_JWTSECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sinsight.fullname" . }}-secret
+                  key: jwtSecret
+            - name: K8SINSIGHT_SERVER_DEFAULTADMINPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sinsight.fullname" . }}-secret
+                  key: defaultAdminPassword
+            - name: K8SINSIGHT_SERVER_ACCESSTOKENTTL
+              value: {{ .Values.backend.config.accessTokenTTL | quote }}
+            - name: K8SINSIGHT_SERVER_REFRESHTOKENTTL
+              value: {{ .Values.backend.config.refreshTokenTTL | quote }}
+            - name: K8SINSIGHT_LOG_LEVEL
+              value: {{ .Values.backend.config.logLevel | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}

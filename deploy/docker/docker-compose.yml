@@ -1,0 +1,34 @@
+name: k8sinsight
+
+services:
+  backend:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile.backend
+    container_name: k8sinsight-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-10080}:8080"
+    volumes:
+      - ../../configs:/app/configs:ro
+    environment:
+      - K8SINSIGHT_DB_HOST=${DB_HOST}
+      - K8SINSIGHT_DB_PORT=${DB_PORT:-5432}
+      - K8SINSIGHT_DB_USER=${DB_USER}
+      - K8SINSIGHT_DB_PASSWORD=${DB_PASSWORD}
+      - K8SINSIGHT_DB_DBNAME=${DB_DBNAME:-k8sinsight}
+      - K8SINSIGHT_SERVER_JWTSECRET=${JWT_SECRET}
+      - K8SINSIGHT_SERVER_DEFAULTADMINPASSWORD=${DEFAULT_ADMIN_PASSWORD:-k8sinsight}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ../../web
+      dockerfile: ../deploy/docker/Dockerfile.frontend
+    container_name: k8sinsight-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3500}:80"
+    depends_on:
+      - backend

@@ -1,0 +1,67 @@
+server:
+  port: 10080
+  readTimeout: 30s
+  writeTimeout: 30s
+  timezone: Asia/Shanghai
+  # jwtSecret: "change-me-in-production"
+  accessTokenTTL: 2h
+  refreshTokenTTL: 168h
+  # defaultAdminPassword: "k8sinsight"
+
+watch:
+  scope: cluster
+  namespaces:
+    include: []
+    exclude:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - monitoring
+  labelSelector: ""
+  excludePods: []
+  #  - namespace: monitoring
+  #    name: "prometheus-node-exporter-*"
+  resyncPeriod: 30m
+  # kubeconfig: ""  # 留空使用 InCluster 或默认 ~/.kube/config
+  aggregation:
+    groupWait: 30s
+    activeWindow: 6h
+    resolveWait: 5m
+
+collect:
+  logTailLines: 200
+  timeoutPerItem: 10s
+  enableMetrics: true
+  # 本地 Prometheus（NodePort 示例）：http://host.docker.internal:30090
+  prometheusURL: "http://host.docker.internal:30090"
+  promQueryRange: 10m
+
+db:
+  host: localhost
+  port: 5432
+  user: k8sinsight
+  password: ""
+  dbname: k8sinsight
+  sslMode: disable
+  maxConns: 20
+  minConns: 5
+
+log:
+  level: info
+
+notify:
+  enabled: false
+  webhooks: []
+  #  - name: ops-webhook
+  #    url: https://example.com/webhook
+  #    headers:
+  #      Authorization: "Bearer xxx"
+  larks: []
+  #  - name: ops-lark
+  #    url: https://open.feishu.cn/open-apis/bot/v2/hook/xxxxx
+  #    secret: ""  # 可选，开启签名校验时填写
+  telegrams: []
+  #  - name: ops-telegram
+  #    botToken: "123456:ABCDEF"
+  #    chatId: "-1001234567890"
+  #    parseMode: "HTML" # 可选，默认 HTML

@@ -1,0 +1,10 @@
+K8sInsight has been deployed.
+
+Frontend service:
+  kubectl get svc frontend -n {{ .Release.Namespace }}
+
+Backend service:
+  kubectl get svc backend -n {{ .Release.Namespace }}
+
+PostgreSQL service:
+  kubectl get svc postgres -n {{ .Release.Namespace }}

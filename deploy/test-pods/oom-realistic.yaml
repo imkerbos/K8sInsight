@@ -1,0 +1,57 @@
+---
+# 真实 OOM 场景：模拟内存泄漏
+# Pod 先正常运行 ~30 秒，逐步分配内存，最终超过 32Mi limit 被 OOM Kill
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-leak-demo
+  namespace: k8sinsight-test
+  labels:
+    app: memory-leak-demo
+    test-scenario: oom-realistic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memory-leak-demo
+  template:
+    metadata:
+      labels:
+        app: memory-leak-demo
+    spec:
+      containers:
+        - name: leaky-app
+          image: python:3.12-alpine
+          command:
+            - python3
+            - -c
+            - |
+              import time, os, sys
+
+              print(f"[INFO] Application starting, PID={os.getpid()}", flush=True)
+              print(f"[INFO] Memory limit: 32Mi", flush=True)
+
+              # Phase 1: 正常运行
+              for i in range(5):
+                  print(f"[INFO] Processing request batch #{i+1} ... OK", flush=True)
+                  time.sleep(2)
+
+              # Phase 2: 内存泄漏开始
+              print("[WARN] Cache is growing, possible memory leak detected", flush=True)
+              leaked = []
+              chunk_size = 2 * 1024 * 1024  # 2MB per chunk
+              for i in range(30):
+                  leaked.append(b'X' * chunk_size)
+                  total_mb = len(leaked) * chunk_size / (1024 * 1024)
+                  print(f"[WARN] Memory usage ~{total_mb:.0f}MB (allocated chunk #{i+1})", flush=True)
+                  time.sleep(1)
+
+              # 不会到这里，会被 OOM Kill
+              print("[ERROR] Should have been OOM killed by now", flush=True)
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "100m"
