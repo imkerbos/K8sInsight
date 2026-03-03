@@ -38,9 +38,13 @@ export default function SSOSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['sso-settings'] })
       queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
-    onError: (error: any) => message.error(error?.response?.data?.error || 'SSO 配置保存失败'),
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { error?: string } } }
+      message.error(axiosErr?.response?.data?.error || 'SSO 配置保存失败')
+    },
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form values are dynamic
   const onSaveSSO = (values: Record<string, any>) => {
     const payload: Partial<SSOSettings> = {
       sso_enabled: values.sso_enabled ? 'true' : 'false',

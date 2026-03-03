@@ -39,7 +39,10 @@ export default function NotifySettingsPage() {
   const testNotifyMutation = useMutation({
     mutationFn: (payload: NotifyTestRequest) => testNotify(payload),
     onSuccess: () => message.success('测试通知发送成功'),
-    onError: (error: any) => message.error(error?.response?.data?.error || '测试通知发送失败'),
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { error?: string } } }
+      message.error(axiosErr?.response?.data?.error || '测试通知发送失败')
+    },
   })
 
   const notifyConfigMutation = useMutation({
@@ -48,9 +51,13 @@ export default function NotifySettingsPage() {
       message.success('通知配置已保存')
       queryClient.invalidateQueries({ queryKey: ['notify-settings'] })
     },
-    onError: (error: any) => message.error(error?.response?.data?.error || '通知配置保存失败'),
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { error?: string } } }
+      message.error(axiosErr?.response?.data?.error || '通知配置保存失败')
+    },
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form values are dynamic
   const onSaveNotifyConfig = (values: Record<string, any>) => {
     let webhookHeaders: Record<string, string> | undefined
     if (values.webhookHeaders) {

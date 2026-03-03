@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Spin, Result, Button } from 'antd'
 import { ssoCallback } from '../../api/auth'
@@ -11,15 +11,20 @@ export default function SSOCallbackPage() {
   const [error, setError] = useState<string | null>(null)
   const calledRef = useRef(false)
 
+  const params = useMemo(() => ({
+    code: searchParams.get('code'),
+    state: searchParams.get('state'),
+  }), [searchParams])
+
   useEffect(() => {
     if (calledRef.current) return
     calledRef.current = true
 
-    const code = searchParams.get('code')
-    const state = searchParams.get('state')
+    const { code, state } = params
 
     if (!code || !state) {
-      setError('缺少必要的回调参数')
+      // defer setState to next microtask to avoid synchronous setState in effect
+      Promise.resolve().then(() => setError('缺少必要的回调参数'))
       return
     }
 
@@ -28,11 +33,12 @@ export default function SSOCallbackPage() {
         await loginWithSSO(res.accessToken, res.refreshToken)
         navigate('/', { replace: true })
       })
-      .catch((err) => {
-        const msg = err?.response?.data?.error || 'SSO 登录失败'
+      .catch((err: unknown) => {
+        const axiosErr = err as { response?: { data?: { error?: string } } }
+        const msg = axiosErr?.response?.data?.error || 'SSO 登录失败'
         setError(msg)
       })
-  }, [searchParams, loginWithSSO, navigate])
+  }, [params, loginWithSSO, navigate])
 
   if (error) {
     return (
