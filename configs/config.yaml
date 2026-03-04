@@ -32,8 +32,10 @@ collect:
   logTailLines: 200
   timeoutPerItem: 10s
   enableMetrics: true
-  # 本地 Prometheus（NodePort 示例）：http://host.docker.internal:30090
-  prometheusURL: "http://host.docker.internal:30090"
+  # Prometheus 地址（留空表示不走 Prometheus 回退；生产建议填集群内 Service）
+  # 示例: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+  # 本地 Docker 场景可用: http://host.docker.internal:30090
+  prometheusURL: ""
   promQueryRange: 10m
 
 db:

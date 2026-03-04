@@ -75,6 +75,12 @@ spec:
               value: {{ .Values.backend.config.refreshTokenTTL | quote }}
             - name: K8SINSIGHT_LOG_LEVEL
               value: {{ .Values.backend.config.logLevel | quote }}
+            - name: K8SINSIGHT_COLLECT_ENABLEMETRICS
+              value: {{ .Values.backend.config.collect.enableMetrics | quote }}
+            - name: K8SINSIGHT_COLLECT_PROMETHEUSURL
+              value: {{ .Values.backend.config.collect.prometheusURL | quote }}
+            - name: K8SINSIGHT_COLLECT_PROMQUERYRANGE
+              value: {{ .Values.backend.config.collect.promQueryRange | quote }}
           readinessProbe:
             httpGet:
               path: /readyz

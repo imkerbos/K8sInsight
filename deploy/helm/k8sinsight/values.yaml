@@ -21,6 +21,10 @@ backend:
     accessTokenTTL: 2h
     refreshTokenTTL: 168h
     logLevel: info
+    collect:
+      enableMetrics: true
+      prometheusURL: ""
+      promQueryRange: 10m
 
 frontend:
   replicaCount: 2

@@ -37,15 +37,15 @@ export default function Dashboard() {
 
   const { data: activeData } = useQuery({
     queryKey: ['incidents', 'active'],
-    queryFn: () => listIncidents({ state: 'Active', pageSize: 1 }),
+    queryFn: () => listIncidents({ state: 'Active', pageSize: 1, includeTotal: true }),
   })
   const { data: detectingData } = useQuery({
     queryKey: ['incidents', 'detecting'],
-    queryFn: () => listIncidents({ state: 'Detecting', pageSize: 1 }),
+    queryFn: () => listIncidents({ state: 'Detecting', pageSize: 1, includeTotal: true }),
   })
   const { data: resolvedData } = useQuery({
     queryKey: ['incidents', 'resolved'],
-    queryFn: () => listIncidents({ state: 'Resolved', pageSize: 1 }),
+    queryFn: () => listIncidents({ state: 'Resolved', pageSize: 1, includeTotal: true }),
   })
   const { data: recentData } = useQuery({
     queryKey: ['incidents', 'recent'],

@@ -115,6 +115,8 @@ func NewRouter(
 		v1.PUT("/settings/branding", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateBranding)
 		v1.GET("/settings/security", permChecker.RequirePermission("settings:manage"), settingHandler.GetSecurity)
 		v1.PUT("/settings/security", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateSecurity)
+		v1.GET("/settings/collect", permChecker.RequirePermission("settings:manage"), settingHandler.GetCollect)
+		v1.PUT("/settings/collect", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateCollect)
 		v1.GET("/settings/notify", permChecker.RequirePermission("settings:manage"), settingHandler.GetNotify)
 		v1.PUT("/settings/notify", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateNotify)
 		v1.POST("/settings/notify/test", permChecker.RequirePermission("settings:manage"), settingHandler.TestNotify)

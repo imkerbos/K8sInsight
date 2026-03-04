@@ -13,6 +13,12 @@ export interface SecuritySettings {
   security_refresh_token_ttl: string
 }
 
+export interface CollectSettings {
+  enableMetrics: boolean
+  prometheusURL: string
+  promQueryRange: string
+}
+
 export interface NotifyTestRequest {
   channel: 'webhook' | 'lark' | 'telegram'
   incidentId?: string
@@ -70,6 +76,16 @@ export async function getSecuritySettings(): Promise<SecuritySettings> {
 
 export async function updateSecuritySettings(settings: Partial<SecuritySettings>) {
   const { data } = await client.put('/settings/security', settings)
+  return data
+}
+
+export async function getCollectSettings(): Promise<CollectSettings> {
+  const { data } = await client.get<CollectSettings>('/settings/collect')
+  return data
+}
+
+export async function updateCollectSettings(settings: CollectSettings) {
+  const { data } = await client.put('/settings/collect', settings)
   return data
 }
 

@@ -42,6 +42,7 @@ type EvidenceBundle struct {
 type Collector struct {
 	clientset kubernetes.Interface
 	cfg       config.CollectConfig
+	cfgLoader func(context.Context) config.CollectConfig
 	logger    *zap.Logger
 	output    chan<- EvidenceBundle
 }
@@ -56,6 +57,11 @@ func NewCollector(clientset kubernetes.Interface, cfg config.CollectConfig, outp
 	}
 }
 
+// SetConfigLoader 设置动态采集配置加载器（可选）
+func (c *Collector) SetConfigLoader(loader func(context.Context) config.CollectConfig) {
+	c.cfgLoader = loader
+}
+
 // HandleAnomaly 实现 detector.EventSink 接口
 // 检测到异常后立即触发证据采集
 func (c *Collector) HandleAnomaly(ctx context.Context, event detector.AnomalyEvent) error {
@@ -65,6 +71,11 @@ func (c *Collector) HandleAnomaly(ctx context.Context, event detector.AnomalyEve
 
 // collect 并行采集所有证据
 func (c *Collector) collect(ctx context.Context, event detector.AnomalyEvent) {
+	cfg := c.cfg
+	if c.cfgLoader != nil {
+		cfg = c.cfgLoader(ctx)
+	}
+
 	c.logger.Info("开始采集证据",
 		zap.String("pod", event.PodName),
 		zap.String("namespace", event.Namespace),
@@ -83,7 +94,7 @@ func (c *Collector) collect(ctx context.Context, event detector.AnomalyEvent) {
 		mu.Unlock()
 	}
 
-	timeout := c.cfg.TimeoutPerItem
+	timeout := cfg.TimeoutPerItem
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
@@ -97,7 +108,7 @@ func (c *Collector) collect(ctx context.Context, event detector.AnomalyEvent) {
 	}()
 	go func() {
 		defer wg.Done()
-		e := collectCurrentLogs(ctx, c.clientset, event, c.cfg.LogTailLines, timeout)
+		e := collectCurrentLogs(ctx, c.clientset, event, cfg.LogTailLines, timeout)
 		addEvidence(e)
 	}()
 
@@ -115,11 +126,11 @@ func (c *Collector) collect(ctx context.Context, event detector.AnomalyEvent) {
 	}()
 
 	// P2: 资源指标（可选）
-	if c.cfg.EnableMetrics {
+	if cfg.EnableMetrics {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			e := collectMetrics(ctx, c.clientset, event, c.cfg, timeout)
+			e := collectMetrics(ctx, c.clientset, event, cfg, timeout)
 			addEvidence(e)
 		}()
 	}

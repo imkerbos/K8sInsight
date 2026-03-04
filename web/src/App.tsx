@@ -18,6 +18,7 @@ import {
   BellOutlined,
   LinkOutlined,
   LockOutlined,
+  FundProjectionScreenOutlined,
 } from '@ant-design/icons'
 import zhCN from 'antd/locale/zh_CN'
 import { useState, useEffect, useMemo, type ReactNode } from 'react'
@@ -33,6 +34,7 @@ import MonitorRuleList from './pages/monitor-rules'
 import UserManagement from './pages/settings/users'
 import RoleManagement from './pages/settings/roles'
 import SecuritySettings from './pages/settings'
+import CollectSettings from './pages/settings/collect'
 import NotifySettings from './pages/settings/notify'
 import SSOSettings from './pages/settings/sso'
 import BrandingSettings from './pages/settings/branding'
@@ -229,6 +231,11 @@ function AppLayout() {
           label: <Link to="/settings/security">安全配置</Link>,
         },
         {
+          key: '/settings/collect',
+          icon: <FundProjectionScreenOutlined />,
+          label: <Link to="/settings/collect">资源采集</Link>,
+        },
+        {
           key: '/settings/notify',
           icon: <BellOutlined />,
           label: <Link to="/settings/notify">通知配置</Link>,
@@ -268,6 +275,7 @@ function AppLayout() {
     if (p === '/settings/roles') return '/settings/roles'
     if (p === '/settings/branding') return '/settings/branding'
     if (p === '/settings/security') return '/settings/security'
+    if (p === '/settings/collect') return '/settings/collect'
     if (p === '/settings/notify') return '/settings/notify'
     if (p === '/settings/sso') return '/settings/sso'
     if (p === '/settings/about') return '/settings/about'
@@ -388,6 +396,9 @@ function AppLayout() {
               } />
               <Route path="/settings/security" element={
                 <RequirePermission permission="settings:manage"><SecuritySettings /></RequirePermission>
+              } />
+              <Route path="/settings/collect" element={
+                <RequirePermission permission="settings:manage"><CollectSettings /></RequirePermission>
               } />
               <Route path="/settings/notify" element={
                 <RequirePermission permission="settings:manage"><NotifySettings /></RequirePermission>

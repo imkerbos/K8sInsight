@@ -50,6 +50,13 @@ var notifyKeys = map[string]string{
 	"notify_telegrams": "[]",
 }
 
+// 资源采集设置支持的 key 列表及默认值
+var collectKeys = map[string]string{
+	"collect_enable_metrics":   "true",
+	"collect_prometheus_url":   "",
+	"collect_prom_query_range": "10m",
+}
+
 // SettingHandler 系统设置 API 处理器
 type SettingHandler struct {
 	settingRepo  repository.SettingRepository
@@ -95,6 +102,12 @@ type NotifySettings struct {
 	Webhooks  []NotifyWebhookSetting  `json:"webhooks"`
 	Larks     []NotifyLarkSetting     `json:"larks"`
 	Telegrams []NotifyTelegramSetting `json:"telegrams"`
+}
+
+type CollectSettings struct {
+	EnableMetrics  bool   `json:"enableMetrics"`
+	PrometheusURL  string `json:"prometheusURL"`
+	PromQueryRange string `json:"promQueryRange"`
 }
 
 func NewSettingHandler(
@@ -264,6 +277,72 @@ func (h *SettingHandler) UpdateSSO(c *gin.Context) {
 
 	if err := h.settingRepo.BatchSet(c.Request.Context(), filtered); err != nil {
 		h.logger.Error("更新 SSO 设置失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "保存成功"})
+}
+
+// GetCollect 获取资源采集设置
+func (h *SettingHandler) GetCollect(c *gin.Context) {
+	keys := make([]string, 0, len(collectKeys))
+	for k := range collectKeys {
+		keys = append(keys, k)
+	}
+
+	settings, err := h.settingRepo.BatchGet(c.Request.Context(), keys)
+	if err != nil {
+		h.logger.Error("获取资源采集设置失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	for k, def := range collectKeys {
+		if settings[k] == "" {
+			settings[k] = def
+		}
+	}
+
+	enableMetrics := settings["collect_enable_metrics"] == "true"
+	promURL := strings.TrimSpace(settings["collect_prometheus_url"])
+	promRange := strings.TrimSpace(settings["collect_prom_query_range"])
+	if promRange == "" {
+		promRange = collectKeys["collect_prom_query_range"]
+	}
+
+	c.JSON(http.StatusOK, CollectSettings{
+		EnableMetrics:  enableMetrics,
+		PrometheusURL:  promURL,
+		PromQueryRange: promRange,
+	})
+}
+
+// UpdateCollect 更新资源采集设置
+func (h *SettingHandler) UpdateCollect(c *gin.Context) {
+	var req CollectSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	req.PrometheusURL = strings.TrimSpace(req.PrometheusURL)
+	req.PromQueryRange = strings.TrimSpace(req.PromQueryRange)
+	if req.PromQueryRange == "" {
+		req.PromQueryRange = collectKeys["collect_prom_query_range"]
+	}
+	if _, err := time.ParseDuration(req.PromQueryRange); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "promQueryRange 格式无效（示例: 30s, 5m, 1h）"})
+		return
+	}
+
+	payload := map[string]string{
+		"collect_enable_metrics":   strconv.FormatBool(req.EnableMetrics),
+		"collect_prometheus_url":   req.PrometheusURL,
+		"collect_prom_query_range": req.PromQueryRange,
+	}
+
+	if err := h.settingRepo.BatchSet(c.Request.Context(), payload); err != nil {
+		h.logger.Error("更新资源采集设置失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
 		return
 	}

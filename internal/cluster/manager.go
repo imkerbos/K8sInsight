@@ -3,10 +3,15 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/kerbos/k8sinsight/internal/aggregator"
@@ -95,6 +100,7 @@ func (m *Manager) StartCluster(ctx context.Context, cluster *model.Cluster) erro
 	det.SetClusterID(cluster.ID)
 
 	col := collector.NewCollector(clientset, m.cfg.Collect, evidenceCh, m.logger)
+	col.SetConfigLoader(m.loadCollectConfig)
 
 	dispatcher := notify.NewDynamicDispatcher(m.loadNotifyNotifiers, m.logger)
 	agg := aggregator.NewAggregator(m.cfg.Watch.Aggregation, m.incidentRepo, m.evidenceRepo, dispatcher, evidenceCh, m.logger)
@@ -129,6 +135,49 @@ func (m *Manager) StartCluster(ctx context.Context, cluster *model.Cluster) erro
 	)
 
 	return nil
+}
+
+func (m *Manager) loadCollectConfig(ctx context.Context) config.CollectConfig {
+	fallback := m.cfg.Collect
+	if m.settingRepo == nil {
+		return fallback
+	}
+
+	cfg := fallback
+	if v, ok := m.readSetting(ctx, "collect_enable_metrics"); ok && strings.TrimSpace(v) != "" {
+		parsed, parseErr := strconv.ParseBool(v)
+		if parseErr != nil {
+			m.logger.Warn("解析 collect_enable_metrics 失败，使用回退值", zap.String("value", v), zap.Error(parseErr))
+		} else {
+			cfg.EnableMetrics = parsed
+		}
+	}
+	// 显式覆盖（允许设置为空字符串以清空地址）
+	if v, ok := m.readSetting(ctx, "collect_prometheus_url"); ok {
+		cfg.PrometheusURL = strings.TrimSpace(v)
+	}
+	if v, ok := m.readSetting(ctx, "collect_prom_query_range"); ok && strings.TrimSpace(v) != "" {
+		parsed, parseErr := time.ParseDuration(v)
+		if parseErr != nil {
+			m.logger.Warn("解析 collect_prom_query_range 失败，使用回退值", zap.String("value", v), zap.Error(parseErr))
+		} else {
+			cfg.PromQueryRange = parsed
+		}
+	}
+
+	return cfg
+}
+
+func (m *Manager) readSetting(ctx context.Context, key string) (string, bool) {
+	v, err := m.settingRepo.Get(ctx, key)
+	if err == nil {
+		return v, true
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false
+	}
+	m.logger.Warn("读取系统设置失败", zap.String("key", key), zap.Error(err))
+	return "", false
 }
 
 func (m *Manager) loadNotifyNotifiers(ctx context.Context) (bool, []notify.Notifier, error) {
