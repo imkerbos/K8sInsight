@@ -17,6 +17,19 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: backend
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z postgres 5432; do
+                echo "PostgreSQL is not ready yet, retrying in 2s..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
