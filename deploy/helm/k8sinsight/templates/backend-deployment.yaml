@@ -36,8 +36,10 @@ spec:
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 10080
           env:
+            - name: K8SINSIGHT_SERVER_PORT
+              value: "10080"
             - name: K8SINSIGHT_DB_HOST
               value: postgres
             - name: K8SINSIGHT_DB_PORT

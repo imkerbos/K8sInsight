@@ -16,7 +16,7 @@ backend:
       memory: 1Gi
   service:
     type: ClusterIP
-    port: 8080
+    port: 10080
   config:
     accessTokenTTL: 2h
     refreshTokenTTL: 168h

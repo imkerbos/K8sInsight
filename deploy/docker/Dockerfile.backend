@@ -12,5 +12,5 @@ WORKDIR /app
 COPY --from=builder /build/k8sinsight .
 COPY configs/config.yaml configs/config.yaml
 
-EXPOSE 8080
+EXPOSE 10080
 ENTRYPOINT ["./k8sinsight"]
