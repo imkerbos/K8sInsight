@@ -123,16 +123,22 @@ func hasAnomalyStatus(pod *corev1.Pod) bool {
 				return true
 			}
 		}
-		// OOMKilled 或异常退出
-		if cs.LastTerminationState.Terminated != nil && cs.LastTerminationState.Terminated.ExitCode != 0 {
-			return true
-		}
-		// 有重启历史
-		if cs.RestartCount > 0 && cs.LastTerminationState.Terminated != nil {
+		// OOMKilled 或异常退出（exitCode=143 视为优雅停止）
+		if isAbnormalTermination(cs.LastTerminationState.Terminated) {
 			return true
 		}
 	}
 	return false
+}
+
+func isAbnormalTermination(t *corev1.ContainerStateTerminated) bool {
+	if t == nil {
+		return false
+	}
+	if t.ExitCode == 0 || t.ExitCode == 143 {
+		return false
+	}
+	return true
 }
 
 // containerStatusChanged 判断容器状态是否发生了有意义的变化

@@ -64,19 +64,20 @@ func (r *oomKilledRule) Name() string { return "OOMKilled" }
 func (r *oomKilledRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEvent {
 	var events []AnomalyEvent
 	for _, cs := range newPod.Status.ContainerStatuses {
+		terminated := cs.LastTerminationState.Terminated
 		// 检查 lastState（上一次终止原因）
-		if cs.LastTerminationState.Terminated != nil &&
-			cs.LastTerminationState.Terminated.Reason == "OOMKilled" {
-			// 确认是新的 OOM（restartCount 增加了）
-			if oldPod != nil && !restartCountIncreased(oldPod, cs.Name, cs.RestartCount) {
-				continue
-			}
-			events = append(events, buildContainerAnomaly(
-				AnomalyOOMKilled, SourcePodState, newPod, cs.Name,
-				fmt.Sprintf("容器 %s 因 OOMKilled 被终止，退出码 %d", cs.Name, cs.LastTerminationState.Terminated.ExitCode),
-				cs.RestartCount, cs.LastTerminationState.Terminated.ExitCode, "OOMKilled",
-			))
+		if terminated == nil || terminated.Reason != "OOMKilled" || isNormalExitCode(terminated.ExitCode) {
+			continue
 		}
+		// 确认是新的 OOM（restartCount 增加了）
+		if oldPod != nil && !restartCountIncreased(oldPod, cs.Name, cs.RestartCount) {
+			continue
+		}
+		events = append(events, buildContainerAnomaly(
+			AnomalyOOMKilled, SourcePodState, newPod, cs.Name,
+			fmt.Sprintf("容器 %s 因 OOMKilled 被终止，退出码 %d", cs.Name, terminated.ExitCode),
+			cs.RestartCount, terminated.ExitCode, "OOMKilled",
+		))
 	}
 	return events
 }
@@ -92,21 +93,38 @@ func (r *errorExitRule) Name() string { return "ErrorExit" }
 func (r *errorExitRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEvent {
 	var events []AnomalyEvent
 	for _, cs := range newPod.Status.ContainerStatuses {
-		if cs.LastTerminationState.Terminated != nil &&
-			cs.LastTerminationState.Terminated.ExitCode != 0 &&
-			cs.LastTerminationState.Terminated.Reason != "OOMKilled" {
-			if oldPod != nil && !restartCountIncreased(oldPod, cs.Name, cs.RestartCount) {
-				continue
-			}
-			terminated := cs.LastTerminationState.Terminated
-			events = append(events, buildContainerAnomaly(
-				AnomalyErrorExit, SourcePodState, newPod, cs.Name,
-				fmt.Sprintf("容器 %s 异常退出，退出码 %d，原因: %s", cs.Name, terminated.ExitCode, terminated.Reason),
-				cs.RestartCount, terminated.ExitCode, terminated.Reason,
-			))
+		terminated := cs.LastTerminationState.Terminated
+		if shouldSkipErrorExit(terminated) {
+			continue
 		}
+		if oldPod != nil && !restartCountIncreased(oldPod, cs.Name, cs.RestartCount) {
+			continue
+		}
+		events = append(events, buildContainerAnomaly(
+			AnomalyErrorExit, SourcePodState, newPod, cs.Name,
+			fmt.Sprintf("容器 %s 异常退出，退出码 %d，原因: %s", cs.Name, terminated.ExitCode, terminated.Reason),
+			cs.RestartCount, terminated.ExitCode, terminated.Reason,
+		))
 	}
 	return events
+}
+
+func shouldSkipErrorExit(terminated *corev1.ContainerStateTerminated) bool {
+	if terminated == nil {
+		return true
+	}
+	if isNormalExitCode(terminated.ExitCode) {
+		return true
+	}
+	if terminated.Reason == "OOMKilled" {
+		return true
+	}
+	return false
+}
+
+func isNormalExitCode(exitCode int32) bool {
+	// 0=正常退出；143=SIGTERM，常见于滚动更新/优雅停止。
+	return exitCode == 0 || exitCode == 143
 }
 
 // ----- ImagePullBackOff 检测 -----

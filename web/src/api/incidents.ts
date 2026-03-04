@@ -27,3 +27,16 @@ export async function getIncidentEvidences(id: string) {
   const { data } = await client.get<{ items: Evidence[] }>(`/incidents/${id}/evidences`)
   return data.items
 }
+
+export interface RecollectMetricsResponse {
+  message: string
+  incidentId: string
+  podName: string
+  collectedAt: string
+  prometheusURL: string
+}
+
+export async function recollectIncidentMetrics(id: string) {
+  const { data } = await client.post<RecollectMetricsResponse>(`/incidents/${id}/recollect-metrics`)
+  return data
+}

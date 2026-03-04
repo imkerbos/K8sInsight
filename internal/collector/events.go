@@ -20,7 +20,7 @@ type eventSummary struct {
 	Message        string `json:"message"`
 	Count          int32  `json:"count"`
 	FirstTimestamp string `json:"firstTimestamp"`
-	LastTimestamp   string `json:"lastTimestamp"`
+	LastTimestamp  string `json:"lastTimestamp"`
 	Source         string `json:"source"`
 }
 
@@ -58,6 +58,9 @@ func collectPodEvents(ctx context.Context, client kubernetes.Interface, event de
 	if event.PodSnapshot != nil {
 		for _, cs := range event.PodSnapshot.Status.ContainerStatuses {
 			if t := cs.LastTerminationState.Terminated; t != nil {
+				if t.ExitCode == 0 || t.ExitCode == 143 {
+					continue
+				}
 				var msg string
 				switch t.Reason {
 				case "OOMKilled":
@@ -84,7 +87,7 @@ func collectPodEvents(ctx context.Context, client kubernetes.Interface, event de
 					Message:        msg,
 					Count:          cs.RestartCount,
 					FirstTimestamp: ts,
-					LastTimestamp:   ts,
+					LastTimestamp:  ts,
 					Source:         "k8sinsight/container-status",
 				})
 			}

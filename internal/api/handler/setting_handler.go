@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -108,6 +109,18 @@ type CollectSettings struct {
 	EnableMetrics  bool   `json:"enableMetrics"`
 	PrometheusURL  string `json:"prometheusURL"`
 	PromQueryRange string `json:"promQueryRange"`
+}
+
+type CollectTestRequest struct {
+	PrometheusURL string `json:"prometheusURL" binding:"required"`
+}
+
+type promInstantResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		Result []json.RawMessage `json:"result"`
+	} `json:"data"`
+	Error string `json:"error"`
 }
 
 func NewSettingHandler(
@@ -347,6 +360,79 @@ func (h *SettingHandler) UpdateCollect(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "保存成功"})
+}
+
+// TestCollectConnection 测试 Prometheus 连接
+func (h *SettingHandler) TestCollectConnection(c *gin.Context) {
+	var req CollectTestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效"})
+		return
+	}
+
+	promURL := strings.TrimSpace(req.PrometheusURL)
+	if promURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Prometheus 地址不能为空"})
+		return
+	}
+	if _, err := url.ParseRequestURI(promURL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Prometheus 地址格式无效"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+
+	resultCount, err := testPrometheusConnection(ctx, promURL)
+	if err != nil {
+		h.logger.Warn("Prometheus 连接测试失败", zap.String("url", promURL), zap.Error(err))
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Prometheus 连接成功",
+		"resultCount": resultCount,
+	})
+}
+
+func testPrometheusConnection(ctx context.Context, baseURL string) (int, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return 0, fmt.Errorf("Prometheus 地址格式无效")
+	}
+
+	path := strings.TrimRight(u.Path, "/")
+	u.Path = path + "/api/v1/query"
+	q := u.Query()
+	q.Set("query", "up")
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return 0, fmt.Errorf("构造测试请求失败: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("连接 Prometheus 失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var payload promInstantResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return 0, fmt.Errorf("Prometheus 响应解析失败: %w", err)
+	}
+
+	if resp.StatusCode >= http.StatusBadRequest || payload.Status != "success" {
+		errText := payload.Error
+		if errText == "" {
+			errText = resp.Status
+		}
+		return 0, fmt.Errorf("Prometheus 查询失败: %s", errText)
+	}
+
+	return len(payload.Data.Result), nil
 }
 
 // GetNotify 获取通知设置

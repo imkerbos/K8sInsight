@@ -70,11 +70,12 @@ func NewRouter(
 		}
 
 		// 事件管理
-		incidentHandler := handler.NewIncidentHandler(incidentRepo, evidenceRepo, logger)
+		incidentHandler := handler.NewIncidentHandler(incidentRepo, evidenceRepo, settingRepo, logger)
 		v1.GET("/incidents", permChecker.RequirePermission("incident:read"), incidentHandler.List)
 		v1.GET("/incidents/:id", permChecker.RequirePermission("incident:read"), incidentHandler.Get)
 		v1.GET("/incidents/:id/evidences", permChecker.RequirePermission("incident:read"), incidentHandler.GetEvidences)
 		v1.GET("/incidents/:id/timeline", permChecker.RequirePermission("incident:read"), incidentHandler.GetTimeline)
+		v1.POST("/incidents/:id/recollect-metrics", permChecker.RequirePermission("incident:read"), permChecker.RequirePermission("settings:manage"), incidentHandler.RecollectMetrics)
 
 		// 集群管理
 		clusterHandler := handler.NewClusterHandler(clusterRepo, clusterMgr, logger)
@@ -117,6 +118,7 @@ func NewRouter(
 		v1.PUT("/settings/security", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateSecurity)
 		v1.GET("/settings/collect", permChecker.RequirePermission("settings:manage"), settingHandler.GetCollect)
 		v1.PUT("/settings/collect", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateCollect)
+		v1.POST("/settings/collect/test", permChecker.RequirePermission("settings:manage"), settingHandler.TestCollectConnection)
 		v1.GET("/settings/notify", permChecker.RequirePermission("settings:manage"), settingHandler.GetNotify)
 		v1.PUT("/settings/notify", permChecker.RequirePermission("settings:manage"), settingHandler.UpdateNotify)
 		v1.POST("/settings/notify/test", permChecker.RequirePermission("settings:manage"), settingHandler.TestNotify)

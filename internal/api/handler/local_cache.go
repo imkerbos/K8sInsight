@@ -47,3 +47,9 @@ func (c *localTTLCache) set(key string, value interface{}) {
 	}
 	c.mu.Unlock()
 }
+
+func (c *localTTLCache) del(key string) {
+	c.mu.Lock()
+	delete(c.data, key)
+	c.mu.Unlock()
+}

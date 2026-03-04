@@ -1,8 +1,10 @@
 import {
+  Button,
   Card,
   Descriptions,
   Divider,
   Empty,
+  message,
   Select,
   Spin,
   Switch,
@@ -12,10 +14,12 @@ import {
   Typography,
 } from 'antd'
 import { useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import dayjs from '../../utils/dayjs'
-import { getIncident, getIncidentEvidences } from '../../api/incidents'
+import { getIncident, getIncidentEvidences, recollectIncidentMetrics } from '../../api/incidents'
+import { useAuth } from '../../contexts/AuthContext'
+import { hasPermission } from '../../utils/permission'
 import type { Evidence } from '../../types/incident'
 import './detail.css'
 
@@ -627,6 +631,20 @@ function TimeSeriesChart({
 function EvidenceContent({ evidence }: { evidence: Evidence }) {
   const [showRaw, setShowRaw] = useState(false)
   const { formatted, isJson } = useMemo(() => formatContent(evidence.content), [evidence.content])
+  const isLogEvidence = evidence.type === 'CurrentLogs' || evidence.type === 'PreviousLogs'
+
+  const downloadLog = () => {
+    const ts = dayjs(evidence.collectedAt).format('YYYYMMDD-HHmmss')
+    const filename = `${evidence.type}-${ts}.log`
+    const content = evidence.content || ''
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <Card size="small" className="incident-evidence-card">
@@ -635,15 +653,22 @@ function EvidenceContent({ evidence }: { evidence: Evidence }) {
           采集时间: {dayjs(evidence.collectedAt).format('YYYY-MM-DD HH:mm:ss')}
           {evidence.error && <Tag color="red" style={{ marginLeft: 8 }}>采集异常: {evidence.error}</Tag>}
         </Text>
-        {isJson && (
-          <Switch
-            checkedChildren="原始"
-            unCheckedChildren="格式化"
-            checked={showRaw}
-            onChange={setShowRaw}
-            size="small"
-          />
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {isLogEvidence && (
+            <Button size="small" onClick={downloadLog}>
+              下载日志
+            </Button>
+          )}
+          {isJson && (
+            <Switch
+              checkedChildren="原始"
+              unCheckedChildren="格式化"
+              checked={showRaw}
+              onChange={setShowRaw}
+              size="small"
+            />
+          )}
+        </div>
       </div>
       <pre className="incident-evidence-pre">
         {showRaw ? (evidence.content || '(无内容)') : formatted}
@@ -673,6 +698,9 @@ function groupEvidences(evidences: Evidence[]) {
 export default function IncidentDetail() {
   const { id } = useParams<{ id: string }>()
   const [selectedRound, setSelectedRound] = useState<string>('latest')
+  const queryClient = useQueryClient()
+  const { permissions } = useAuth()
+  const canRecollectMetrics = hasPermission(permissions, 'settings:manage')
 
   const { data: incident, isLoading } = useQuery({
     queryKey: ['incident', id],
@@ -684,6 +712,18 @@ export default function IncidentDetail() {
     queryKey: ['incident', id, 'evidences'],
     queryFn: () => getIncidentEvidences(id!),
     enabled: !!id,
+  })
+
+  const recollectMetricsMutation = useMutation({
+    mutationFn: () => recollectIncidentMetrics(id!),
+    onSuccess: () => {
+      message.success('指标补采成功，证据已更新')
+      queryClient.invalidateQueries({ queryKey: ['incident', id, 'evidences'] })
+    },
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { error?: string } } }
+      message.error(axiosErr?.response?.data?.error || '指标补采失败')
+    },
   })
 
   const grouped = useMemo(() => groupEvidences(evidences ?? []), [evidences])
@@ -780,6 +820,18 @@ export default function IncidentDetail() {
             </Tag>
             <Tag color="processing">{incident.anomalyType}</Tag>
             <Tag color="default">发生 {incident.count} 次</Tag>
+            {canRecollectMetrics && (
+              <Button
+                size="small"
+                loading={recollectMetricsMutation.isPending}
+                onClick={() => {
+                  if (!id) return
+                  recollectMetricsMutation.mutate()
+                }}
+              >
+                补采指标
+              </Button>
+            )}
           </div>
         </div>
         <div className="incident-hero-msg">{incident.message}</div>

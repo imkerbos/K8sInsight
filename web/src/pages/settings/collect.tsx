@@ -2,6 +2,7 @@ import { Card, Form, Input, Button, message, Spin, Switch } from 'antd'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getCollectSettings,
+  testCollectConnection,
   updateCollectSettings,
   type CollectSettings,
 } from '../../api/settings'
@@ -33,8 +34,29 @@ export default function CollectSettingsPage() {
     },
   })
 
+  const testMutation = useMutation({
+    mutationFn: (prometheusURL: string) => testCollectConnection({ prometheusURL }),
+    onSuccess: () => {
+      message.success('Prometheus 连接测试成功')
+    },
+    onError: (error: unknown) => {
+      const axiosErr = error as { response?: { data?: { error?: string } } }
+      message.error(axiosErr?.response?.data?.error || 'Prometheus 连接测试失败')
+    },
+  })
+
   const onFinish = (values: CollectSettings) => {
     mutation.mutate(values)
+  }
+
+  const onTestConnection = async () => {
+    const values = await form.validateFields(['prometheusURL'])
+    const prometheusURL = values.prometheusURL?.trim()
+    if (!prometheusURL) {
+      message.warning('请先输入 Prometheus 地址')
+      return
+    }
+    testMutation.mutate(prometheusURL)
   }
 
   return (
@@ -72,6 +94,9 @@ export default function CollectSettingsPage() {
             <Form.Item style={{ marginBottom: 0 }}>
               <Button type="primary" htmlType="submit" loading={mutation.isPending}>
                 保存
+              </Button>
+              <Button style={{ marginLeft: 8 }} onClick={onTestConnection} loading={testMutation.isPending}>
+                测试连接
               </Button>
             </Form.Item>
           </Form>

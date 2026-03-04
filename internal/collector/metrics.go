@@ -16,7 +16,7 @@ import (
 )
 
 // collectMetrics 采集 Pod 资源使用指标
-// 通过 Metrics API (metrics.k8s.io) 获取 CPU/Memory 实时用量
+// 已配置 Prometheus 时优先走 Prometheus；否则走 metrics.k8s.io
 func collectMetrics(
 	ctx context.Context,
 	client kubernetes.Interface,
@@ -27,26 +27,9 @@ func collectMetrics(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// 通过 RESTClient 访问 metrics.k8s.io API
-	data, err := client.CoreV1().RESTClient().
-		Get().
-		AbsPath("/apis/metrics.k8s.io/v1beta1").
-		Namespace(event.Namespace).
-		Resource("pods").
-		Name(event.PodName).
-		DoRaw(ctx)
-
-	if err == nil {
-		return Evidence{
-			Type:      EvidenceMetrics,
-			Content:   string(data),
-			Timestamp: time.Now(),
-		}
-	}
-
-	// metrics.k8s.io 不可用时，回退到 Prometheus query_range
+	// 配置了 Prometheus 时优先查询 Prometheus
 	if strings.TrimSpace(cfg.PrometheusURL) != "" {
-		content, pErr := collectPrometheusRange(ctx, cfg.PrometheusURL, cfg.PromQueryRange, event)
+		content, pErr := CollectPrometheusRange(ctx, cfg.PrometheusURL, cfg.PromQueryRange, event)
 		if pErr == nil {
 			return Evidence{
 				Type:      EvidenceMetrics,
@@ -54,10 +37,43 @@ func collectMetrics(
 				Timestamp: time.Now(),
 			}
 		}
+
+		// Prometheus 失败时，回退到 metrics.k8s.io
+		data, err := client.CoreV1().RESTClient().
+			Get().
+			AbsPath("/apis/metrics.k8s.io/v1beta1").
+			Namespace(event.Namespace).
+			Resource("pods").
+			Name(event.PodName).
+			DoRaw(ctx)
+		if err == nil {
+			return Evidence{
+				Type:      EvidenceMetrics,
+				Content:   string(data),
+				Timestamp: time.Now(),
+			}
+		}
+
 		return Evidence{
 			Type:      EvidenceMetrics,
 			Timestamp: time.Now(),
-			Error:     fmt.Sprintf("metrics.k8s.io: %v; prometheus: %v", err, pErr),
+			Error:     fmt.Sprintf("prometheus: %v; metrics.k8s.io: %v", pErr, err),
+		}
+	}
+
+	// 未配置 Prometheus，走 metrics.k8s.io
+	data, err := client.CoreV1().RESTClient().
+		Get().
+		AbsPath("/apis/metrics.k8s.io/v1beta1").
+		Namespace(event.Namespace).
+		Resource("pods").
+		Name(event.PodName).
+		DoRaw(ctx)
+	if err == nil {
+		return Evidence{
+			Type:      EvidenceMetrics,
+			Content:   string(data),
+			Timestamp: time.Now(),
 		}
 	}
 
@@ -94,7 +110,7 @@ type promMetricsBundle struct {
 	Series map[string][]json.RawMessage `json:"series"`
 }
 
-func collectPrometheusRange(
+func CollectPrometheusRange(
 	ctx context.Context,
 	baseURL string,
 	rangeDur time.Duration,

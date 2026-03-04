@@ -19,6 +19,10 @@ export interface CollectSettings {
   promQueryRange: string
 }
 
+export interface CollectTestRequest {
+  prometheusURL: string
+}
+
 export interface NotifyTestRequest {
   channel: 'webhook' | 'lark' | 'telegram'
   incidentId?: string
@@ -86,6 +90,11 @@ export async function getCollectSettings(): Promise<CollectSettings> {
 
 export async function updateCollectSettings(settings: CollectSettings) {
   const { data } = await client.put('/settings/collect', settings)
+  return data
+}
+
+export async function testCollectConnection(request: CollectTestRequest) {
+  const { data } = await client.post('/settings/collect/test', request)
   return data
 }
 
