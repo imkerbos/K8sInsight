@@ -38,73 +38,45 @@ type SSOConfigResponse struct {
 	ProviderName string `json:"providerName"`
 }
 
-// stateEntry state/nonce 存储条目
-type stateEntry struct {
-	nonce     string
-	expiresAt time.Time
-}
-
-// StateStore 内存 state/nonce 存储（含自动过期清理）
+// StateStore 基于数据库的 state/nonce 存储（多副本安全）
 type StateStore struct {
-	mu      sync.Mutex
-	entries map[string]stateEntry
-	stopCh  chan struct{}
+	db *gorm.DB
 }
 
-// NewStateStore 创建 state 存储并启动自动清理
-func NewStateStore() *StateStore {
-	s := &StateStore{
-		entries: make(map[string]stateEntry),
-		stopCh:  make(chan struct{}),
-	}
-	go s.cleanup()
-	return s
+// NewStateStore 创建基于数据库的 state 存储
+func NewStateStore(db *gorm.DB) *StateStore {
+	return &StateStore{db: db}
 }
 
 // Save 保存 state/nonce 对
 func (s *StateStore) Save(state, nonce string, ttl time.Duration) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.entries[state] = stateEntry{
-		nonce:     nonce,
-		expiresAt: time.Now().Add(ttl),
+	entry := model.SSOState{
+		State:     state,
+		Nonce:     nonce,
+		ExpiresAt: time.Now().Add(ttl),
 	}
+	s.db.Create(&entry)
 }
 
-// Consume 消费 state 并返回对应的 nonce（一次性使用）
+// Consume 消费 state 并返回对应的 nonce（一次性使用，原子操作）
 func (s *StateStore) Consume(state string) (nonce string, ok bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entry, exists := s.entries[state]
-	if !exists {
+	var entry model.SSOState
+	// 查找并删除（原子操作：先查后删在同一事务中）
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("state = ? AND expires_at > ?", state, time.Now()).First(&entry).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&entry).Error
+	})
+	if err != nil {
 		return "", false
 	}
-	delete(s.entries, state)
-	if time.Now().After(entry.expiresAt) {
-		return "", false
-	}
-	return entry.nonce, true
+	return entry.Nonce, true
 }
 
-// cleanup 定期清理过期条目
-func (s *StateStore) cleanup() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			s.mu.Lock()
-			now := time.Now()
-			for k, v := range s.entries {
-				if now.After(v.expiresAt) {
-					delete(s.entries, k)
-				}
-			}
-			s.mu.Unlock()
-		case <-s.stopCh:
-			return
-		}
-	}
+// Cleanup 清理过期条目
+func (s *StateStore) Cleanup() {
+	s.db.Where("expires_at < ?", time.Now()).Delete(&model.SSOState{})
 }
 
 // SSOService SSO 认证服务
@@ -126,6 +98,7 @@ type SSOService struct {
 
 // NewSSOService 创建 SSO 认证服务
 func NewSSOService(
+	db *gorm.DB,
 	settingRepo repository.SettingRepository,
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
@@ -137,7 +110,7 @@ func NewSSOService(
 		userRepo:     userRepo,
 		roleRepo:     roleRepo,
 		tokenService: tokenService,
-		stateStore:   NewStateStore(),
+		stateStore:   NewStateStore(db),
 		logger:       logger.Named("auth.sso"),
 	}
 }

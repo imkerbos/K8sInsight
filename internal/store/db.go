@@ -40,6 +40,7 @@ func NewDB(cfg config.DBConfig, logger *zap.Logger) (*gorm.DB, error) {
 		&model.RefreshToken{},
 		&model.SystemSetting{},
 		&model.Role{},
+		&model.SSOState{},
 	); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}

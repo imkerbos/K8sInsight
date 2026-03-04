@@ -103,7 +103,7 @@ func main() {
 	}
 
 	// 初始化 SSO 服务
-	ssoService := auth.NewSSOService(settingRepo, userRepo, roleRepo, tokenService, logger)
+	ssoService := auth.NewSSOService(db, settingRepo, userRepo, roleRepo, tokenService, logger)
 
 	// 初始化集群管理器
 	clusterMgr := cluster.NewManager(clusterRepo, monitorRuleRepo, incidentRepo, evidenceRepo, settingRepo, cfg, logger)
