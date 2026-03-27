@@ -28,6 +28,9 @@ const (
 	EvidenceCurrentLogs  EvidenceType = "CurrentLogs"
 	EvidencePodEvents    EvidenceType = "PodEvents"
 	EvidencePodSnapshot  EvidenceType = "PodSnapshot"
+	EvidencePodDescribe  EvidenceType = "PodDescribe"
+	EvidenceWorkloadSpec EvidenceType = "WorkloadSpec"
+	EvidenceNodeContext  EvidenceType = "NodeContext"
 	EvidenceMetrics      EvidenceType = "Metrics"
 )
 
@@ -122,6 +125,24 @@ func (c *Collector) collect(ctx context.Context, event detector.AnomalyEvent) {
 	go func() {
 		defer wg.Done()
 		e := collectPodSnapshot(event)
+		addEvidence(e)
+	}()
+
+	// P1.5: 诊断上下文增强（并行）
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		e := collectPodDescribe(ctx, c.clientset, event, timeout)
+		addEvidence(e)
+	}()
+	go func() {
+		defer wg.Done()
+		e := collectWorkloadSpec(ctx, c.clientset, event, timeout)
+		addEvidence(e)
+	}()
+	go func() {
+		defer wg.Done()
+		e := collectNodeContext(ctx, c.clientset, event, timeout)
 		addEvidence(e)
 	}()
 

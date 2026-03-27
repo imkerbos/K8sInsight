@@ -20,7 +20,7 @@ import dayjs from '../../utils/dayjs'
 import { getIncident, getIncidentEvidences, recollectIncidentMetrics } from '../../api/incidents'
 import { useAuth } from '../../contexts/AuthContext'
 import { hasPermission } from '../../utils/permission'
-import type { Evidence } from '../../types/incident'
+import type { Evidence, Incident } from '../../types/incident'
 import './detail.css'
 
 const { Text, Title } = Typography
@@ -28,6 +28,9 @@ const { Text, Title } = Typography
 /** 证据类型的中文标签 */
 const evidenceTypeLabel: Record<string, string> = {
   PodEvents: 'Pod 事件',
+  NodeContext: '节点上下文',
+  PodDescribe: 'Pod 详细描述',
+  WorkloadSpec: '工作负载规格',
   CurrentLogs: '当前日志',
   PreviousLogs: '上次日志',
   PodSnapshot: 'Pod 快照',
@@ -37,10 +40,13 @@ const evidenceTypeLabel: Record<string, string> = {
 /** 证据类型排序权重 */
 const evidenceTypeOrder: Record<string, number> = {
   PodEvents: 0,
-  CurrentLogs: 1,
-  PreviousLogs: 2,
-  PodSnapshot: 3,
-  Metrics: 4,
+  NodeContext: 1,
+  PodSnapshot: 2,
+  PodDescribe: 3,
+  WorkloadSpec: 4,
+  CurrentLogs: 5,
+  PreviousLogs: 6,
+  Metrics: 7,
 }
 
 /** 尝试格式化 JSON 内容 */
@@ -92,6 +98,25 @@ type PromMetricsBundle = {
     memory?: PromSeries[]
     cpu?: PromSeries[]
   }
+}
+
+type ExportableEvidence = {
+  id: string
+  type: string
+  collectedAt: string
+  createdAt: string
+  error?: string
+  contentType: 'json' | 'text'
+  content: unknown
+}
+
+type IncidentExportPayload = {
+  schemaVersion: 'k8sinsight.incident.export.v1'
+  exportedAt: string
+  source: 'K8sInsight'
+  incident: Incident
+  podNames: string[]
+  evidences: ExportableEvidence[]
 }
 
 function parseJsonSafe<T>(raw?: string): T | null {
@@ -441,6 +466,16 @@ function buildDiagnosis(anomalyType: string, grouped: [string, Evidence[]][]): D
   return null
 }
 
+function downloadTextFile(filename: string, content: string, mimeType = 'text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 type TimeValue = {
   ts: number
   value: number
@@ -637,13 +672,7 @@ function EvidenceContent({ evidence }: { evidence: Evidence }) {
     const ts = dayjs(evidence.collectedAt).format('YYYYMMDD-HHmmss')
     const filename = `${evidence.type}-${ts}.log`
     const content = evidence.content || ''
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadTextFile(filename, content)
   }
 
   return (
@@ -784,6 +813,38 @@ export default function IncidentDetail() {
     try { return JSON.parse(incident.podNames) } catch { return [] }
   }, [incident])
 
+  const exportIncident = () => {
+    if (!incident) return
+
+    const exportEvidences: ExportableEvidence[] = (evidences ?? []).map((e) => {
+      const parsed = parseJsonSafe<unknown>(e.content)
+      return {
+        id: e.id,
+        type: e.type,
+        collectedAt: e.collectedAt,
+        createdAt: e.createdAt,
+        error: e.error,
+        contentType: parsed !== null ? 'json' : 'text',
+        content: parsed !== null ? parsed : (e.content || ''),
+      }
+    })
+
+    const payload: IncidentExportPayload = {
+      schemaVersion: 'k8sinsight.incident.export.v1',
+      exportedAt: new Date().toISOString(),
+      source: 'K8sInsight',
+      incident,
+      podNames,
+      evidences: exportEvidences,
+    }
+
+    const ts = dayjs().format('YYYYMMDD-HHmmss')
+    const filename = `incident-${incident.id}-${ts}.json`
+    const content = JSON.stringify(payload, null, 2)
+    downloadTextFile(filename, content, 'application/json;charset=utf-8')
+    message.success('事件已导出，可直接提交给 AI 分析')
+  }
+
   if (isLoading) return <Spin size="large" style={{ display: 'block', marginTop: 100, textAlign: 'center' }} />
   if (!incident) return <Empty description="事件未找到" />
 
@@ -820,6 +881,9 @@ export default function IncidentDetail() {
             </Tag>
             <Tag color="processing">{incident.anomalyType}</Tag>
             <Tag color="default">发生 {incident.count} 次</Tag>
+            <Button size="small" onClick={exportIncident}>
+              导出事件(JSON)
+            </Button>
             {canRecollectMetrics && (
               <Button
                 size="small"

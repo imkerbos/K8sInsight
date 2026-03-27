@@ -4,13 +4,13 @@ import "time"
 
 // Evidence 证据数据库模型
 type Evidence struct {
-	ID         string    `gorm:"primaryKey;type:uuid" json:"id"`
-	IncidentID string    `gorm:"index;not null;type:uuid" json:"incidentId"`
-	Type       string    `gorm:"not null" json:"type"` // PreviousLogs, CurrentLogs, PodEvents, PodSnapshot, Metrics
-	Content    string    `gorm:"type:text" json:"content"`
-	Error      string    `gorm:"type:text" json:"error,omitempty"`
+	ID          string    `gorm:"primaryKey;type:uuid" json:"id"`
+	IncidentID  string    `gorm:"index;not null;type:uuid" json:"incidentId"`
+	Type        string    `gorm:"not null" json:"type"` // PreviousLogs, CurrentLogs, PodEvents, PodSnapshot, PodDescribe, WorkloadSpec, NodeContext, Metrics
+	Content     string    `gorm:"type:text" json:"content"`
+	Error       string    `gorm:"type:text" json:"error,omitempty"`
 	CollectedAt time.Time `gorm:"not null" json:"collectedAt"`
-	CreatedAt  time.Time `json:"createdAt"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 func (Evidence) TableName() string {
