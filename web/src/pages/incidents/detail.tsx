@@ -751,7 +751,7 @@ export default function IncidentDetail() {
   const clusterName = useMemo(() => {
     if (!incident?.clusterId || !clusters) return ''
     return clusters.find(c => c.id === incident.clusterId)?.name || ''
-  }, [incident?.clusterId, clusters])
+  }, [incident, clusters])
 
   const recollectMetricsMutation = useMutation({
     mutationFn: () => recollectIncidentMetrics(id!),
