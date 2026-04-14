@@ -65,6 +65,11 @@ func (h *ClusterHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// 自动启动集群管道
+	if err := h.clusterMgr.StartCluster(c.Request.Context(), cl); err != nil {
+		h.logger.Error("集群已创建但管道启动失败", zap.String("clusterID", cl.ID), zap.Error(err))
+	}
+
 	h.logger.Info("集群已创建", zap.String("id", cl.ID), zap.String("name", cl.Name))
 	c.JSON(http.StatusCreated, cl)
 }
@@ -199,6 +204,15 @@ func (h *ClusterHandler) Activate(c *gin.Context) {
 	if err := h.clusterRepo.Update(c.Request.Context(), cl); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新状态失败"})
 		return
+	}
+
+	// 启动集群管道（如果尚未运行）
+	if !h.clusterMgr.IsRunning(cl.ID) {
+		if err := h.clusterMgr.StartCluster(c.Request.Context(), cl); err != nil {
+			h.logger.Error("启动集群管道失败", zap.String("clusterID", cl.ID), zap.Error(err))
+			c.JSON(http.StatusOK, gin.H{"message": "集群已启用，但管道启动失败: " + err.Error(), "status": "active"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "集群已启用", "status": "active"})
