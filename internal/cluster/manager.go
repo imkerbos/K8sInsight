@@ -358,6 +358,19 @@ func (m *Manager) buildWatchConfig(cluster *model.Cluster) config.WatchConfig {
 		watchCfg.Scope = rule.WatchScope
 	}
 
+	if rule.WatchScope == "namespaces" && rule.WatchNamespaces != "" {
+		var nsList []string
+		for _, ns := range strings.Split(rule.WatchNamespaces, ",") {
+			ns = strings.TrimSpace(ns)
+			if ns != "" {
+				nsList = append(nsList, ns)
+			}
+		}
+		if len(nsList) > 0 {
+			watchCfg.Namespaces.Include = nsList
+		}
+	}
+
 	if rule.LabelSelector != "" {
 		watchCfg.LabelSelector = rule.LabelSelector
 	}

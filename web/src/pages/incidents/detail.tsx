@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import dayjs from '../../utils/dayjs'
 import { getIncident, getIncidentEvidences, recollectIncidentMetrics } from '../../api/incidents'
+import { listClusters } from '../../api/clusters'
 import { useAuth } from '../../contexts/AuthContext'
 import { hasPermission } from '../../utils/permission'
 import type { Evidence, Incident } from '../../types/incident'
@@ -743,6 +744,15 @@ export default function IncidentDetail() {
     enabled: !!id,
   })
 
+  const { data: clusters } = useQuery({
+    queryKey: ['clusters'],
+    queryFn: listClusters,
+  })
+  const clusterName = useMemo(() => {
+    if (!incident?.clusterId || !clusters) return ''
+    return clusters.find(c => c.id === incident.clusterId)?.name || ''
+  }, [incident?.clusterId, clusters])
+
   const recollectMetricsMutation = useMutation({
     mutationFn: () => recollectIncidentMetrics(id!),
     onSuccess: () => {
@@ -873,7 +883,7 @@ export default function IncidentDetail() {
         <div className="incident-hero-head">
           <div>
             <Title level={4} style={{ margin: 0 }}>事件详情</Title>
-            <Text type="secondary">{incident.namespace} / {incident.ownerKind}/{incident.ownerName}</Text>
+            <Text type="secondary">{clusterName ? `${clusterName} / ` : ''}{incident.namespace} / {incident.ownerKind}/{incident.ownerName}</Text>
           </div>
           <div className="incident-hero-tags">
             <Tag color={incident.state === 'Active' ? 'red' : incident.state === 'Resolved' ? 'green' : 'orange'}>
@@ -907,6 +917,7 @@ export default function IncidentDetail() {
           labelStyle={{ width: 100 }}
           column={{ xs: 1, sm: 1, md: 2, xl: 3 }}
         >
+          <Descriptions.Item label="集群">{clusterName || incident.clusterId || '-'}</Descriptions.Item>
           <Descriptions.Item label="命名空间">{incident.namespace}</Descriptions.Item>
           <Descriptions.Item label="Owner">{incident.ownerKind}/{incident.ownerName}</Descriptions.Item>
           <Descriptions.Item label="首次发现">{dayjs(incident.firstSeen).format('YYYY-MM-DD HH:mm:ss')}</Descriptions.Item>

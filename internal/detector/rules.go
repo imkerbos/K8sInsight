@@ -32,9 +32,10 @@ func (r *crashLoopRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEvent {
 			if oldPod != nil && isAlreadyCrashLoop(oldPod, cs.Name, cs.RestartCount) {
 				continue
 			}
+			image := getContainerImage(newPod, cs.Name)
 			events = append(events, buildContainerAnomaly(
 				AnomalyCrashLoopBackOff, SourcePodState, newPod, cs.Name,
-				fmt.Sprintf("容器 %s 进入 CrashLoopBackOff，已重启 %d 次", cs.Name, cs.RestartCount),
+				fmt.Sprintf("容器 %s (%s) 进入 CrashLoopBackOff，已重启 %d 次", cs.Name, image, cs.RestartCount),
 				cs.RestartCount, 0, "CrashLoopBackOff",
 			))
 		}
@@ -73,9 +74,10 @@ func (r *oomKilledRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEvent {
 		if oldPod != nil && !restartCountIncreased(oldPod, cs.Name, cs.RestartCount) {
 			continue
 		}
+		image := getContainerImage(newPod, cs.Name)
 		events = append(events, buildContainerAnomaly(
 			AnomalyOOMKilled, SourcePodState, newPod, cs.Name,
-			fmt.Sprintf("容器 %s 因 OOMKilled 被终止，退出码 %d", cs.Name, terminated.ExitCode),
+			fmt.Sprintf("容器 %s (%s) 因 OOMKilled 被终止，退出码 %d", cs.Name, image, terminated.ExitCode),
 			cs.RestartCount, terminated.ExitCode, "OOMKilled",
 		))
 	}
@@ -100,9 +102,10 @@ func (r *errorExitRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEvent {
 		if oldPod != nil && !restartCountIncreased(oldPod, cs.Name, cs.RestartCount) {
 			continue
 		}
+		image := getContainerImage(newPod, cs.Name)
 		events = append(events, buildContainerAnomaly(
 			AnomalyErrorExit, SourcePodState, newPod, cs.Name,
-			fmt.Sprintf("容器 %s 异常退出，退出码 %d，原因: %s", cs.Name, terminated.ExitCode, terminated.Reason),
+			fmt.Sprintf("容器 %s (%s) 异常退出，退出码 %d，原因: %s", cs.Name, image, terminated.ExitCode, terminated.Reason),
 			cs.RestartCount, terminated.ExitCode, terminated.Reason,
 		))
 	}
@@ -143,9 +146,10 @@ func (r *imagePullBackOffRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEve
 			if oldPod != nil && isAlreadyImagePullBackOff(oldPod, cs.Name) {
 				continue
 			}
+			image := getContainerImage(newPod, cs.Name)
 			events = append(events, buildContainerAnomaly(
 				AnomalyImagePullBackOff, SourcePodState, newPod, cs.Name,
-				fmt.Sprintf("容器 %s 镜像拉取失败: %s", cs.Name, cs.State.Waiting.Message),
+				fmt.Sprintf("容器 %s 镜像 %s 拉取失败: %s", cs.Name, image, cs.State.Waiting.Message),
 				0, 0, cs.State.Waiting.Reason,
 			))
 		}
@@ -179,9 +183,10 @@ func (r *createContainerConfigErrorRule) Evaluate(oldPod, newPod *corev1.Pod) []
 		if oldPod != nil && isAlreadyCreateContainerConfigError(oldPod, cs.Name) {
 			continue
 		}
+		image := getContainerImage(newPod, cs.Name)
 		events = append(events, buildContainerAnomaly(
 			AnomalyCreateContainerConfigError, SourcePodState, newPod, cs.Name,
-			fmt.Sprintf("容器 %s 配置错误导致启动失败: %s", cs.Name, cs.State.Waiting.Message),
+			fmt.Sprintf("容器 %s (%s) 配置错误导致启动失败: %s", cs.Name, image, cs.State.Waiting.Message),
 			cs.RestartCount, 0, cs.State.Waiting.Reason,
 		))
 	}
@@ -220,6 +225,16 @@ func (r *evictedRule) Evaluate(oldPod, newPod *corev1.Pod) []AnomalyEvent {
 }
 
 // ----- 辅助函数 -----
+
+// getContainerImage 从 Pod Spec 中按容器名查找镜像
+func getContainerImage(pod *corev1.Pod, containerName string) string {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == containerName {
+			return c.Image
+		}
+	}
+	return ""
+}
 
 func restartCountIncreased(oldPod *corev1.Pod, containerName string, newCount int32) bool {
 	for _, cs := range oldPod.Status.ContainerStatuses {

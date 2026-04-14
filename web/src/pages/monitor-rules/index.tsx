@@ -52,10 +52,11 @@ export default function MonitorRuleList() {
   const availableClusters = (clusters ?? []).filter(c => !usedClusterIds.has(c.id))
 
   const createMut = useMutation({
-    mutationFn: (values: { clusterId: string; name: string; description?: string; watchScope?: string; labelSelector?: string; anomalyTypes?: string[] }) => {
-      const { anomalyTypes, ...rest } = values
+    mutationFn: (values: { clusterId: string; name: string; description?: string; watchScope?: string; watchNamespaces?: string[]; labelSelector?: string; anomalyTypes?: string[] }) => {
+      const { anomalyTypes, watchNamespaces, ...rest } = values
       return createMonitorRule({
         ...rest,
+        watchNamespaces: watchNamespaces?.length ? watchNamespaces.join(',') : undefined,
         anomalyTypes: anomalyTypes?.length ? JSON.stringify(anomalyTypes) : undefined,
       })
     },
@@ -110,8 +111,18 @@ export default function MonitorRuleList() {
     {
       title: '监控范围',
       dataIndex: 'watchScope',
-      width: 110,
-      render: (s: string) => <span style={{ fontSize: 13 }}>{s === 'cluster' ? '全集群' : '指定命名空间'}</span>,
+      width: 160,
+      render: (s: string, record) => {
+        if (s !== 'namespaces' || !record.watchNamespaces) {
+          return <span style={{ fontSize: 13 }}>全集群</span>
+        }
+        const nsList = record.watchNamespaces.split(',').filter(Boolean)
+        return (
+          <span style={{ fontSize: 13 }}>
+            {nsList.map(ns => <Tag key={ns} style={{ fontSize: 12 }}>{ns}</Tag>)}
+          </span>
+        )
+      },
     },
     {
       title: '标签选择器',
@@ -209,6 +220,19 @@ export default function MonitorRuleList() {
               { label: '全集群', value: 'cluster' },
               { label: '指定命名空间', value: 'namespaces' },
             ]} />
+          </Form.Item>
+          <Form.Item noStyle dependencies={['watchScope']}>
+            {({ getFieldValue }) =>
+              getFieldValue('watchScope') === 'namespaces' ? (
+                <Form.Item
+                  name="watchNamespaces"
+                  label="命名空间"
+                  rules={[{ required: true, message: '请输入至少一个命名空间' }]}
+                >
+                  <Select mode="tags" placeholder="输入命名空间名称后回车" tokenSeparators={[',']} />
+                </Form.Item>
+              ) : null
+            }
           </Form.Item>
           <Form.Item name="labelSelector" label="标签选择器">
             <Input placeholder="可选，例如: app=nginx" />

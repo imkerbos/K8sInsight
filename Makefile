@@ -9,7 +9,7 @@ COMPOSE_PROD := docker compose -f deploy/docker/docker-compose.prod.yml --env-fi
 DB_DSN ?= postgres://k8sinsight:k8sinsight@localhost:5432/k8sinsight?sslmode=disable
 
 .PHONY: build run test lint fmt clean tidy help \
-        dev-up dev-up-d dev-down dev-ps dev-logs \
+        dev-docker-up dev-docker-up-d dev-docker-down dev-docker-ps dev-docker-logs \
         prod-up prod-up-d prod-down prod-ps prod-logs \
         migrate-up migrate-down migrate-create migrate-status \
         frontend-install frontend-build
@@ -38,24 +38,24 @@ tidy:
 # Docker Compose 开发环境（后端 Air + 前端 Vite HMR）
 # ============================================================
 
-## dev-up: 前台启动开发环境
-dev-up:
+## dev-docker-up: 前台启动开发环境
+dev-docker-up:
 	$(COMPOSE) up --build
 
-## dev-up-d: 后台启动开发环境
-dev-up-d:
+## dev-docker-up-d: 后台启动开发环境
+dev-docker-up-d:
 	$(COMPOSE) up -d --build
 
-## dev-down: 停止开发环境
-dev-down:
+## dev-docker-down: 停止开发环境
+dev-docker-down:
 	$(COMPOSE) down
 
-## dev-ps: 查看容器状态
-dev-ps:
+## dev-docker-ps: 查看容器状态
+dev-docker-ps:
 	$(COMPOSE) ps
 
-## dev-logs: 查看容器日志
-dev-logs:
+## dev-docker-logs: 查看容器日志
+dev-docker-logs:
 	$(COMPOSE) logs -f
 
 # ============================================================

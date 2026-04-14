@@ -1,10 +1,11 @@
 import { Table, Tag, Space, Input, Select, Button } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import dayjs from '../../utils/dayjs'
 import { listIncidents } from '../../api/incidents'
+import { listClusters } from '../../api/clusters'
 import type { Incident, IncidentState, AnomalyType } from '../../types/incident'
 
 const stateColors: Record<IncidentState, string> = {
@@ -29,20 +30,28 @@ const typeColors: Record<AnomalyType, string> = {
 export default function IncidentList() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
+  const [clusterId, setClusterId] = useState('')
   const [namespace, setNamespace] = useState('')
   const [state, setState] = useState('')
   const [anomalyType, setAnomalyType] = useState('')
   const [ownerName, setOwnerName] = useState('')
   const [cursorStack, setCursorStack] = useState<Array<{ lastSeen: string; id: string } | null>>([null])
 
+  const { data: clusters } = useQuery({
+    queryKey: ['clusters'],
+    queryFn: listClusters,
+  })
+  const clusterNameMap = useMemo(() => new Map((clusters ?? []).map(c => [c.id, c.name])), [clusters])
+
   const currentCursor = cursorStack[page - 1]
   const canPrev = page > 1
 
   const { data, isLoading } = useQuery({
-    queryKey: ['incidents', { page, namespace, state, anomalyType, ownerName, currentCursor }],
+    queryKey: ['incidents', { page, clusterId, namespace, state, anomalyType, ownerName, currentCursor }],
     queryFn: () => listIncidents({
       page,
       pageSize: 20,
+      clusterId: clusterId || undefined,
       namespace,
       state,
       type: anomalyType,
@@ -76,6 +85,12 @@ export default function IncidentList() {
   }
 
   const columns: ColumnsType<Incident> = [
+    {
+      title: '集群',
+      dataIndex: 'clusterId',
+      width: 120,
+      render: (id: string) => clusterNameMap.get(id) ?? id ?? '-',
+    },
     {
       title: '状态',
       dataIndex: 'state',
@@ -122,6 +137,13 @@ export default function IncidentList() {
     <div>
       <h2>异常事件</h2>
       <Space style={{ marginBottom: 16 }} wrap>
+        <Select
+          placeholder="全部集群"
+          allowClear
+          style={{ width: 160 }}
+          onChange={v => { setClusterId(v ?? ''); resetPaging() }}
+          options={(clusters ?? []).map(c => ({ label: c.name, value: c.id }))}
+        />
         <Input
           placeholder="命名空间"
           allowClear

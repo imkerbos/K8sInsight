@@ -4,6 +4,7 @@ import type { Incident, Evidence, PaginatedResponse } from '../types/incident'
 export interface ListIncidentsParams {
   page?: number
   pageSize?: number
+  clusterId?: string
   namespace?: string
   state?: string
   type?: string

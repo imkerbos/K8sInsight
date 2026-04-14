@@ -179,7 +179,7 @@ K8sInsight 适用于以下场景：
 启动命令：
 
 ```bash
-make dev-up-d
+make dev-docker-up-d
 ```
 
 ### Production 环境（必须支持两种方式）

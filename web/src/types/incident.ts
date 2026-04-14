@@ -23,6 +23,7 @@ export interface Incident {
   ownerName: string
   anomalyType: AnomalyType
   message: string
+  clusterId?: string
   podNames: string
   createdAt: string
   updatedAt: string
