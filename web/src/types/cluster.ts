@@ -1,6 +1,7 @@
 export interface Cluster {
   id: string
   name: string
+  prometheusUrl?: string
   status: 'active' | 'inactive'
   connectionStatus: 'unknown' | 'connected' | 'failed'
   statusMessage?: string

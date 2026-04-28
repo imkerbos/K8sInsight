@@ -9,6 +9,7 @@ export async function listClusters() {
 export async function createCluster(req: {
   name: string
   kubeconfigData: string
+  prometheusUrl?: string
 }) {
   const { data } = await client.post<Cluster>('/clusters', req)
   return data
@@ -17,6 +18,7 @@ export async function createCluster(req: {
 export async function updateCluster(id: string, req: {
   name?: string
   kubeconfigData?: string
+  prometheusUrl?: string
 }) {
   const { data } = await client.put<Cluster>(`/clusters/${id}`, req)
   return data

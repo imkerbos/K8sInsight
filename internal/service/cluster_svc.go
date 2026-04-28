@@ -39,11 +39,12 @@ func NewClusterService(
 }
 
 // Create 创建集群并自动启动监控管道
-func (s *ClusterService) Create(ctx context.Context, name, kubeconfigData string) (*model.Cluster, error) {
+func (s *ClusterService) Create(ctx context.Context, name, kubeconfigData, prometheusURL string) (*model.Cluster, error) {
 	cl := &model.Cluster{
 		ID:               uuid.New().String(),
 		Name:             name,
 		KubeconfigData:   kubeconfigData,
+		PrometheusURL:    strings.TrimSpace(prometheusURL),
 		Status:           "active",
 		ConnectionStatus: "unknown",
 	}
@@ -61,7 +62,7 @@ func (s *ClusterService) Create(ctx context.Context, name, kubeconfigData string
 }
 
 // Update 更新集群配置
-func (s *ClusterService) Update(ctx context.Context, id string, name, kubeconfigData string) (*model.Cluster, error) {
+func (s *ClusterService) Update(ctx context.Context, id string, name, kubeconfigData string, prometheusURL *string) (*model.Cluster, error) {
 	cl, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("集群未找到: %w", err)
@@ -76,6 +77,9 @@ func (s *ClusterService) Update(ctx context.Context, id string, name, kubeconfig
 		cl.Version = ""
 		cl.NodeCount = 0
 		cl.StatusMessage = ""
+	}
+	if prometheusURL != nil {
+		cl.PrometheusURL = strings.TrimSpace(*prometheusURL)
 	}
 
 	if err := s.repo.Update(ctx, cl); err != nil {
@@ -209,9 +213,13 @@ func (s *ClusterService) GetMetrics(ctx context.Context, id string, rangeDur tim
 		return nil, fmt.Errorf("集群未找到: %w", err)
 	}
 
-	promURL := s.pipeline.GetPrometheusURL(ctx)
+	// 优先使用集群自身配置的 Prometheus 地址，没有则回退到全局配置
+	promURL := strings.TrimSpace(cl.PrometheusURL)
 	if promURL == "" {
-		return nil, fmt.Errorf("未配置 Prometheus 地址，请在 系统管理 → 资源采集 中配置")
+		promURL = s.pipeline.GetPrometheusURL(ctx)
+	}
+	if promURL == "" {
+		return nil, fmt.Errorf("未配置 Prometheus 地址，请在集群设置或 系统管理 → 资源采集 中配置")
 	}
 
 	if !s.pipeline.IsRunning(cl.ID) {

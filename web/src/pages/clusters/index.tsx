@@ -64,7 +64,7 @@ export default function ClusterList() {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, ...req }: { id: string; name?: string; kubeconfigData?: string }) =>
+    mutationFn: ({ id, ...req }: { id: string; name?: string; kubeconfigData?: string; prometheusUrl?: string }) =>
       updateCluster(id, req),
     onSuccess: () => {
       handleModalClose()
@@ -132,7 +132,7 @@ export default function ClusterList() {
 
   const handleEdit = (record: Cluster) => {
     setEditingCluster(record)
-    form.setFieldsValue({ name: record.name, kubeconfigData: '' })
+    form.setFieldsValue({ name: record.name, kubeconfigData: '', prometheusUrl: record.prometheusUrl || '' })
     setModalOpen(true)
   }
 
@@ -142,11 +142,12 @@ export default function ClusterList() {
     setModalOpen(false)
   }
 
-  const handleSubmit = (values: { name: string; kubeconfigData: string }) => {
+  const handleSubmit = (values: { name: string; kubeconfigData: string; prometheusUrl?: string }) => {
     if (editingCluster) {
-      const req: { id: string; name?: string; kubeconfigData?: string } = { id: editingCluster.id }
+      const req: { id: string; name?: string; kubeconfigData?: string; prometheusUrl?: string } = { id: editingCluster.id }
       if (values.name && values.name !== editingCluster.name) req.name = values.name
       if (values.kubeconfigData) req.kubeconfigData = values.kubeconfigData
+      req.prometheusUrl = values.prometheusUrl ?? ''
       updateMut.mutate(req)
     } else {
       createMut.mutate(values)
@@ -345,6 +346,13 @@ export default function ClusterList() {
               placeholder={editingCluster ? '留空表示不修改 kubeconfig' : '粘贴 kubeconfig YAML 内容'}
               style={{ fontFamily: 'monospace', fontSize: 12 }}
             />
+          </Form.Item>
+          <Form.Item
+            name="prometheusUrl"
+            label="Prometheus 地址"
+            extra="留空则使用系统全局配置的 Prometheus 地址"
+          >
+            <Input placeholder="例如: http://prometheus.monitoring.svc:9090" />
           </Form.Item>
           {editingCluster && (
             <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: -12 }}>
