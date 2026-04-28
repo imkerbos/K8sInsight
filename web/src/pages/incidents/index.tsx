@@ -1,4 +1,4 @@
-import { Table, Tag, Space, Input, Select, Button } from 'antd'
+import { Table, Tag, Space, Input, Select } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
@@ -30,12 +30,12 @@ const typeColors: Record<AnomalyType, string> = {
 export default function IncidentList() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [clusterId, setClusterId] = useState('')
   const [namespace, setNamespace] = useState('')
   const [state, setState] = useState('')
   const [anomalyType, setAnomalyType] = useState('')
   const [ownerName, setOwnerName] = useState('')
-  const [cursorStack, setCursorStack] = useState<Array<{ lastSeen: string; id: string } | null>>([null])
 
   const { data: clusters } = useQuery({
     queryKey: ['clusters'],
@@ -43,45 +43,22 @@ export default function IncidentList() {
   })
   const clusterNameMap = useMemo(() => new Map((clusters ?? []).map(c => [c.id, c.name])), [clusters])
 
-  const currentCursor = cursorStack[page - 1]
-  const canPrev = page > 1
-
   const { data, isLoading } = useQuery({
-    queryKey: ['incidents', { page, clusterId, namespace, state, anomalyType, ownerName, currentCursor }],
+    queryKey: ['incidents', { page, pageSize, clusterId, namespace, state, anomalyType, ownerName }],
     queryFn: () => listIncidents({
       page,
-      pageSize: 20,
+      pageSize,
       clusterId: clusterId || undefined,
       namespace,
       state,
       type: anomalyType,
       ownerName,
-      cursorLastSeen: currentCursor?.lastSeen,
-      cursorId: currentCursor?.id,
-      includeTotal: page === 1,
+      includeTotal: true,
     }),
   })
 
-  const hasMore = !!data?.hasMore
-
   const resetPaging = () => {
     setPage(1)
-    setCursorStack([null])
-  }
-
-  const goNext = () => {
-    if (!hasMore || !data?.nextCursorLastSeen || !data?.nextCursorId) return
-    const nextCursor = { lastSeen: data.nextCursorLastSeen, id: data.nextCursorId }
-    setCursorStack(prev => {
-      if (prev.length > page) return prev
-      return [...prev, nextCursor]
-    })
-    setPage(prev => prev + 1)
-  }
-
-  const goPrev = () => {
-    if (!canPrev) return
-    setPage(prev => prev - 1)
   }
 
   const columns: ColumnsType<Incident> = [
@@ -191,18 +168,24 @@ export default function IncidentList() {
         columns={columns}
         dataSource={data?.items ?? []}
         loading={isLoading}
-        pagination={false}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data?.total ?? 0,
+          showTotal: (total) => `共 ${total} 条`,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          onChange: (p, ps) => {
+            setPage(p)
+            setPageSize(ps)
+          },
+        }}
         onRow={(record) => ({
           onClick: () => navigate(`/incidents/${record.id}`),
           style: { cursor: 'pointer' },
         })}
       />
-      <Space style={{ marginTop: 16 }}>
-        <Button onClick={goPrev} disabled={!canPrev}>上一页</Button>
-        <Button onClick={goNext} disabled={!hasMore}>下一页</Button>
-        <span>第 {page} 页</span>
-        {typeof data?.total === 'number' && page === 1 && <span>（总计 {data.total} 条）</span>}
-      </Space>
     </div>
   )
 }

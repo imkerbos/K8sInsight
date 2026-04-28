@@ -41,6 +41,7 @@ import BrandingSettings from './pages/settings/branding'
 import AboutPage from './pages/settings/about'
 import LoginPage from './pages/login'
 import SSOCallbackPage from './pages/login/SSOCallback'
+import SSOLoginPage from './pages/login/SSOLogin'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -445,6 +446,7 @@ export default function App() {
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<LoginRoute />} />
+                <Route path="/auth/sso/login" element={<SSOLoginPage />} />
                 <Route path="/auth/sso/callback" element={<SSOCallbackPage />} />
                 <Route path="/*" element={
                   <RequireAuth>

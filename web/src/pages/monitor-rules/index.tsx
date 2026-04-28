@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Table, Button, Tag, Modal, Form, Input, Select, message, Popconfirm, Typography, Switch } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from '../../utils/dayjs'
 import {
   listMonitorRules,
   createMonitorRule,
+  updateMonitorRule,
   deleteMonitorRule,
   toggleMonitorRule,
 } from '../../api/monitorRules'
@@ -33,6 +34,7 @@ export default function MonitorRuleList() {
   const { permissions } = useAuth()
   const canWrite = hasPermission(permissions, 'rule:write')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingRule, setEditingRule] = useState<MonitorRule | null>(null)
   const [form] = Form.useForm()
 
   const { data: rules, isLoading } = useQuery({
@@ -67,6 +69,25 @@ export default function MonitorRuleList() {
       queryClient.invalidateQueries({ queryKey: ['monitor-rules'] })
     },
     onError: () => message.error('创建失败'),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: (values: { name?: string; description?: string; watchScope?: string; watchNamespaces?: string[]; labelSelector?: string; anomalyTypes?: string[] }) => {
+      const { anomalyTypes, watchNamespaces, ...rest } = values
+      return updateMonitorRule(editingRule!.id, {
+        ...rest,
+        watchNamespaces: watchNamespaces?.length ? watchNamespaces.join(',') : '',
+        anomalyTypes: anomalyTypes?.length ? JSON.stringify(anomalyTypes) : '',
+      })
+    },
+    onSuccess: () => {
+      message.success('监控规则更新成功')
+      setModalOpen(false)
+      setEditingRule(null)
+      form.resetFields()
+      queryClient.invalidateQueries({ queryKey: ['monitor-rules'] })
+    },
+    onError: () => message.error('更新失败'),
   })
 
   const deleteMut = useMutation({
@@ -156,23 +177,43 @@ export default function MonitorRuleList() {
           {
             title: '操作',
             key: 'actions',
-            width: 80,
+            width: 130,
             render: (_: unknown, record: MonitorRule) => (
-              <Popconfirm title="确定删除该规则？" onConfirm={() => deleteMut.mutate(record.id)}>
-                <Button size="small" type="text" danger icon={<DeleteOutlined />}>删除</Button>
-              </Popconfirm>
+              <span style={{ display: 'flex', gap: 4 }}>
+                <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEdit(record)}>编辑</Button>
+                <Popconfirm title="确定删除该规则？" onConfirm={() => deleteMut.mutate(record.id)}>
+                  <Button size="small" type="text" danger icon={<DeleteOutlined />}>删除</Button>
+                </Popconfirm>
+              </span>
             ),
           } as const,
         ]
       : []),
   ]
 
+  const openEdit = (rule: MonitorRule) => {
+    setEditingRule(rule)
+    let anomalyTypes: string[] = []
+    if (rule.anomalyTypes) {
+      try { anomalyTypes = JSON.parse(rule.anomalyTypes) } catch { /* ignore */ }
+    }
+    form.setFieldsValue({
+      name: rule.name,
+      description: rule.description,
+      watchScope: rule.watchScope || 'cluster',
+      watchNamespaces: rule.watchNamespaces ? rule.watchNamespaces.split(',').filter(Boolean) : [],
+      labelSelector: rule.labelSelector,
+      anomalyTypes,
+    })
+    setModalOpen(true)
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>监控规则</h2>
         {canWrite && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingRule(null); form.resetFields(); setModalOpen(true) }}>
             添加规则
           </Button>
         )}
@@ -188,27 +229,29 @@ export default function MonitorRuleList() {
       />
 
       <Modal
-        title="添加监控规则"
+        title={editingRule ? '编辑监控规则' : '添加监控规则'}
         open={modalOpen}
-        onCancel={() => { form.resetFields(); setModalOpen(false) }}
+        onCancel={() => { form.resetFields(); setEditingRule(null); setModalOpen(false) }}
         onOk={() => form.submit()}
-        confirmLoading={createMut.isPending}
+        confirmLoading={editingRule ? updateMut.isPending : createMut.isPending}
         width={600}
         destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
-          onFinish={(values) => createMut.mutate(values)}
+          onFinish={(values) => editingRule ? updateMut.mutate(values) : createMut.mutate(values)}
           style={{ marginTop: 16 }}
         >
-          <Form.Item name="clusterId" label="关联集群" rules={[{ required: true, message: '请选择集群' }]}>
-            <Select
-              placeholder="选择集群"
-              options={availableClusters.map(c => ({ label: c.name, value: c.id }))}
-              notFoundContent="无可用集群（所有集群已配置规则）"
-            />
-          </Form.Item>
+          {!editingRule && (
+            <Form.Item name="clusterId" label="关联集群" rules={[{ required: true, message: '请选择集群' }]}>
+              <Select
+                placeholder="选择集群"
+                options={availableClusters.map(c => ({ label: c.name, value: c.id }))}
+                notFoundContent="无可用集群（所有集群已配置规则）"
+              />
+            </Form.Item>
+          )}
           <Form.Item name="name" label="规则名称" rules={[{ required: true, message: '请输入规则名称' }]}>
             <Input placeholder="例如: 生产集群监控规则" />
           </Form.Item>
