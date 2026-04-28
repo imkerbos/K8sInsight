@@ -85,7 +85,7 @@ export default function TimeSeriesChart({
         params.forEach((p) => {
           html += `<div style="display:flex;align-items:center;gap:6px">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
-            <span>${p.seriesName}: <b>${fmtNumber(p.value)}</b> ${unit}</span>
+            <span>${p.seriesName}: <b>${fmtNumber(p.value ?? 0)}</b> ${unit}</span>
           </div>`
         })
         return html
