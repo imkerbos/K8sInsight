@@ -12,6 +12,7 @@ type Cluster struct {
 	StatusMessage    string    `gorm:"type:text" json:"statusMessage,omitempty"`
 	Version          string     `gorm:"type:varchar(32)" json:"version,omitempty"`
 	PrometheusURL    string     `gorm:"type:text;not null;default:''" json:"prometheusUrl,omitempty"`
+	PrometheusLabels string     `gorm:"type:text;not null;default:''" json:"prometheusLabels,omitempty"` // 额外标签过滤，如 cluster="biz-1",env="prod"
 	NodeCount        int        `gorm:"not null;default:0" json:"nodeCount"`
 	LastEventTime    *time.Time `json:"lastEventTime,omitempty"`
 	CreatedAt        time.Time  `json:"createdAt"`

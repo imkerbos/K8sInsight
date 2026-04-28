@@ -25,15 +25,17 @@ func NewClusterHandler(svc *service.ClusterService, logger *zap.Logger) *Cluster
 }
 
 type createClusterRequest struct {
-	Name           string `json:"name" binding:"required"`
-	KubeconfigData string `json:"kubeconfigData" binding:"required"`
-	PrometheusURL  string `json:"prometheusUrl"`
+	Name             string `json:"name" binding:"required"`
+	KubeconfigData   string `json:"kubeconfigData" binding:"required"`
+	PrometheusURL    string `json:"prometheusUrl"`
+	PrometheusLabels string `json:"prometheusLabels"`
 }
 
 type updateClusterRequest struct {
-	Name           string  `json:"name"`
-	KubeconfigData string  `json:"kubeconfigData"`
-	PrometheusURL  *string `json:"prometheusUrl"` // pointer 区分 "未传" 和 "传了空字符串"
+	Name             string  `json:"name"`
+	KubeconfigData   string  `json:"kubeconfigData"`
+	PrometheusURL    *string `json:"prometheusUrl"`
+	PrometheusLabels *string `json:"prometheusLabels"`
 }
 
 // Create 创建集群
@@ -44,7 +46,7 @@ func (h *ClusterHandler) Create(c *gin.Context) {
 		return
 	}
 
-	cl, err := h.svc.Create(c.Request.Context(), req.Name, req.KubeconfigData, req.PrometheusURL)
+	cl, err := h.svc.Create(c.Request.Context(), req.Name, req.KubeconfigData, req.PrometheusURL, req.PrometheusLabels)
 	if err != nil {
 		h.logger.Error("创建集群失败", zap.Error(err))
 		response.ServerError(c, "创建集群失败")
@@ -84,7 +86,7 @@ func (h *ClusterHandler) Update(c *gin.Context) {
 		return
 	}
 
-	cl, err := h.svc.Update(c.Request.Context(), c.Param("id"), req.Name, req.KubeconfigData, req.PrometheusURL)
+	cl, err := h.svc.Update(c.Request.Context(), c.Param("id"), req.Name, req.KubeconfigData, req.PrometheusURL, req.PrometheusLabels)
 	if err != nil {
 		h.logger.Error("更新集群失败", zap.Error(err))
 		response.ServerError(c, "更新集群失败")

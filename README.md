@@ -134,7 +134,7 @@ K8sInsight 适用于以下场景：
 | API 文档 | Swagger (swaggo/swag) | 自动生成 |
 | 参数校验 | validator (go-playground/validator) | Gin 内置集成 |
 | 跨域 | gin-contrib/cors | |
-| Prometheus 指标 | prometheus/client_golang | 暴露 /metrics |
+| Prometheus 指标 | prometheus/client_golang | 暴露 /metrics，兼容 VictoriaMetrics |
 | 健康检查 | /healthz + /readyz | K8s 探针 |
 | 优雅关停 | os/signal + context | SIGTERM 处理 |
 | 限流 | ulule/limiter | API 限流保护 |
@@ -430,6 +430,48 @@ git push origin v1.0.0
 
 - 仓库 `Settings -> Actions -> General` 允许 workflow 运行。
 - 仓库 `Settings -> Actions -> General -> Workflow permissions` 设置为 `Read and write permissions`（用于 `packages: write` 推送 GHCR）。
+
+---
+
+## 集群监控配置
+
+K8sInsight 支持按集群独立配置 Prometheus / VictoriaMetrics 数据源，在集群管理页面的添加/编辑弹窗中配置：
+
+| 字段 | 说明 |
+|------|------|
+| **Prometheus 地址** | 该集群的 Prometheus 或 VictoriaMetrics 查询地址，留空则使用系统全局配置 |
+| **指标标签过滤** | 多集群共用同一数据源时，用于区分集群的 PromQL 标签选择器 |
+
+### 支持的数据源
+
+| 数据源 | Prometheus 地址示例 |
+|--------|-------------------|
+| Prometheus | `http://prometheus.monitoring.svc:9090` |
+| VictoriaMetrics 单机 | `http://victoria-metrics:8428` |
+| VictoriaMetrics 集群 | `http://vmselect:8481/select/0/prometheus` |
+
+### 多集群配置示例
+
+多个集群的 vmagent 通过 remote write 写入同一个 VictoriaMetrics 时：
+
+1. 各集群 vmagent 配置 `external_labels` 标识集群：
+
+```yaml
+# vmagent 配置
+global:
+  external_labels:
+    cluster: "biz-1"
+```
+
+2. K8sInsight 中各集群的配置：
+
+| 集群 | Prometheus 地址 | 指标标签过滤 |
+|------|---------------|------------|
+| DevOps 集群 | `http://vmselect:8481/select/0/prometheus` | `cluster="devops"` |
+| 业务集群 A | `http://vmselect:8481/select/0/prometheus` | `cluster="biz-1"` |
+| 业务集群 B | `http://vmselect:8481/select/0/prometheus` | `cluster="biz-2"` |
+
+标签过滤会自动注入到所有 PromQL 查询中，确保各集群数据互不干扰。
 
 ---
 

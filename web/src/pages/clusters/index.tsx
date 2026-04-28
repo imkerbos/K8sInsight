@@ -64,7 +64,7 @@ export default function ClusterList() {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, ...req }: { id: string; name?: string; kubeconfigData?: string; prometheusUrl?: string }) =>
+    mutationFn: ({ id, ...req }: { id: string; name?: string; kubeconfigData?: string; prometheusUrl?: string; prometheusLabels?: string }) =>
       updateCluster(id, req),
     onSuccess: () => {
       handleModalClose()
@@ -132,7 +132,7 @@ export default function ClusterList() {
 
   const handleEdit = (record: Cluster) => {
     setEditingCluster(record)
-    form.setFieldsValue({ name: record.name, kubeconfigData: '', prometheusUrl: record.prometheusUrl || '' })
+    form.setFieldsValue({ name: record.name, kubeconfigData: '', prometheusUrl: record.prometheusUrl || '', prometheusLabels: record.prometheusLabels || '' })
     setModalOpen(true)
   }
 
@@ -142,12 +142,13 @@ export default function ClusterList() {
     setModalOpen(false)
   }
 
-  const handleSubmit = (values: { name: string; kubeconfigData: string; prometheusUrl?: string }) => {
+  const handleSubmit = (values: { name: string; kubeconfigData: string; prometheusUrl?: string; prometheusLabels?: string }) => {
     if (editingCluster) {
-      const req: { id: string; name?: string; kubeconfigData?: string; prometheusUrl?: string } = { id: editingCluster.id }
+      const req: { id: string; name?: string; kubeconfigData?: string; prometheusUrl?: string; prometheusLabels?: string } = { id: editingCluster.id }
       if (values.name && values.name !== editingCluster.name) req.name = values.name
       if (values.kubeconfigData) req.kubeconfigData = values.kubeconfigData
       req.prometheusUrl = values.prometheusUrl ?? ''
+      req.prometheusLabels = values.prometheusLabels ?? ''
       updateMut.mutate(req)
     } else {
       createMut.mutate(values)
@@ -352,7 +353,14 @@ export default function ClusterList() {
             label="Prometheus 地址"
             extra="留空则使用系统全局配置的 Prometheus 地址"
           >
-            <Input placeholder="例如: http://prometheus.monitoring.svc:9090" />
+            <Input placeholder="例如: http://vmselect:8481/select/0/prometheus" />
+          </Form.Item>
+          <Form.Item
+            name="prometheusLabels"
+            label="指标标签过滤"
+            extra="多集群共用同一 Prometheus/VictoriaMetrics 时，填写 vmagent external_labels 来区分集群数据"
+          >
+            <Input placeholder={'例如: cluster="biz-1",env="prod"'} />
           </Form.Item>
           {editingCluster && (
             <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: -12 }}>

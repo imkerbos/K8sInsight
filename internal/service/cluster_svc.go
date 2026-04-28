@@ -39,12 +39,13 @@ func NewClusterService(
 }
 
 // Create 创建集群并自动启动监控管道
-func (s *ClusterService) Create(ctx context.Context, name, kubeconfigData, prometheusURL string) (*model.Cluster, error) {
+func (s *ClusterService) Create(ctx context.Context, name, kubeconfigData, prometheusURL, prometheusLabels string) (*model.Cluster, error) {
 	cl := &model.Cluster{
 		ID:               uuid.New().String(),
 		Name:             name,
 		KubeconfigData:   kubeconfigData,
 		PrometheusURL:    strings.TrimSpace(prometheusURL),
+		PrometheusLabels: strings.TrimSpace(prometheusLabels),
 		Status:           "active",
 		ConnectionStatus: "unknown",
 	}
@@ -62,7 +63,7 @@ func (s *ClusterService) Create(ctx context.Context, name, kubeconfigData, prome
 }
 
 // Update 更新集群配置
-func (s *ClusterService) Update(ctx context.Context, id string, name, kubeconfigData string, prometheusURL *string) (*model.Cluster, error) {
+func (s *ClusterService) Update(ctx context.Context, id string, name, kubeconfigData string, prometheusURL, prometheusLabels *string) (*model.Cluster, error) {
 	cl, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("集群未找到: %w", err)
@@ -80,6 +81,9 @@ func (s *ClusterService) Update(ctx context.Context, id string, name, kubeconfig
 	}
 	if prometheusURL != nil {
 		cl.PrometheusURL = strings.TrimSpace(*prometheusURL)
+	}
+	if prometheusLabels != nil {
+		cl.PrometheusLabels = strings.TrimSpace(*prometheusLabels)
 	}
 
 	if err := s.repo.Update(ctx, cl); err != nil {
@@ -230,14 +234,23 @@ func (s *ClusterService) GetMetrics(ctx context.Context, id string, rangeDur tim
 	start := end.Add(-rangeDur)
 	step := pickStep(rangeDur)
 
+	// 构建额外的标签过滤条件（用于多集群场景，如 cluster="biz-1"）
+	extraLabels := strings.TrimSpace(cl.PrometheusLabels)
+	lf := func(base string) string {
+		if extraLabels == "" {
+			return base
+		}
+		return base + "," + extraLabels
+	}
+
 	queries := map[string]string{
-		"cpu_usage":     `sum(rate(container_cpu_usage_seconds_total{image!=""}[2m]))`,
-		"memory_usage":  `sum(container_memory_working_set_bytes{image!=""})`,
-		"network_rx":    `sum(rate(container_network_receive_bytes_total{interface="eth0"}[2m]))`,
-		"network_tx":    `sum(rate(container_network_transmit_bytes_total{interface="eth0"}[2m]))`,
-		"pod_count":     `count(kube_pod_info) or vector(0)`,
-		"cpu_requests":  `sum(kube_pod_container_resource_requests{resource="cpu"}) or vector(0)`,
-		"mem_requests":  `sum(kube_pod_container_resource_requests{resource="memory"}) or vector(0)`,
+		"cpu_usage":     fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{%s}[2m]))`, lf(`image!=""`)),
+		"memory_usage":  fmt.Sprintf(`sum(container_memory_working_set_bytes{%s})`, lf(`image!=""`)),
+		"network_rx":    fmt.Sprintf(`sum(rate(container_network_receive_bytes_total{%s}[2m]))`, lf(`interface="eth0"`)),
+		"network_tx":    fmt.Sprintf(`sum(rate(container_network_transmit_bytes_total{%s}[2m]))`, lf(`interface="eth0"`)),
+		"pod_count":     fmt.Sprintf(`count(kube_pod_info{%s}) or vector(0)`, extraLabels),
+		"cpu_requests":  fmt.Sprintf(`sum(kube_pod_container_resource_requests{%s}) or vector(0)`, lf(`resource="cpu"`)),
+		"mem_requests":  fmt.Sprintf(`sum(kube_pod_container_resource_requests{%s}) or vector(0)`, lf(`resource="memory"`)),
 	}
 
 	result := &ClusterMetrics{
