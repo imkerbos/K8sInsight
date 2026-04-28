@@ -10,10 +10,11 @@ type Cluster struct {
 	Status           string    `gorm:"not null;default:'active'" json:"status"`              // active/inactive
 	ConnectionStatus string    `gorm:"not null;default:'unknown'" json:"connectionStatus"`   // unknown/connected/failed
 	StatusMessage    string    `gorm:"type:text" json:"statusMessage,omitempty"`
-	Version          string    `gorm:"type:varchar(32)" json:"version,omitempty"`
-	NodeCount        int       `gorm:"not null;default:0" json:"nodeCount"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	Version          string     `gorm:"type:varchar(32)" json:"version,omitempty"`
+	NodeCount        int        `gorm:"not null;default:0" json:"nodeCount"`
+	LastEventTime    *time.Time `json:"lastEventTime,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
 }
 
 func (Cluster) TableName() string {

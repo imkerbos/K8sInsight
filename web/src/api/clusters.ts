@@ -44,3 +44,18 @@ export async function testClusterConnection(id: string) {
   }>(`/clusters/${id}/test`)
   return data
 }
+
+export type ClusterMetrics = {
+  clusterId: string
+  range: string
+  step: string
+  series: Record<string, [number, string][]>
+}
+
+export async function getClusterMetrics(id: string, range: string = '1h') {
+  const { data } = await client.get<ClusterMetrics>(`/clusters/${id}/metrics`, {
+    params: { range },
+    timeout: 20000,
+  })
+  return data
+}

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/kerbos/k8sinsight/internal/config"
 	"github.com/kerbos/k8sinsight/internal/detector"
@@ -16,11 +17,12 @@ import (
 // Watcher 状态感知层主控
 // 管理 SharedInformerFactory 和各 Handler 的生命周期
 type Watcher struct {
-	factory    informers.SharedInformerFactory
-	detector   *detector.Detector
-	filter     *Filter
-	logger     *zap.Logger
-	cancelFunc context.CancelFunc
+	factory     informers.SharedInformerFactory
+	detector    *detector.Detector
+	filter      *Filter
+	onHeartbeat func() // 收到 K8s 事件时的心跳回调
+	logger      *zap.Logger
+	cancelFunc  context.CancelFunc
 }
 
 // New 创建 Watcher 实例
@@ -52,6 +54,11 @@ func New(clientset kubernetes.Interface, cfg config.WatchConfig, det *detector.D
 	}
 }
 
+// SetOnHeartbeat 设置心跳回调，Watcher 收到任何 K8s 事件时调用
+func (w *Watcher) SetOnHeartbeat(fn func()) {
+	w.onHeartbeat = fn
+}
+
 // Start 启动 Watcher，注册 Handler 并开始监听
 func (w *Watcher) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -60,14 +67,14 @@ func (w *Watcher) Start(ctx context.Context) error {
 	// 注册 Pod Informer Handler（主通道）
 	podInformer := w.factory.Core().V1().Pods().Informer()
 	podHandler := NewPodHandler(ctx, w.filter, w.detector, w.logger)
-	if _, err := podInformer.AddEventHandler(podHandler.EventHandler()); err != nil {
+	if _, err := podInformer.AddEventHandler(w.wrapHandler(podHandler.EventHandler())); err != nil {
 		return fmt.Errorf("注册 Pod Handler 失败: %w", err)
 	}
 
 	// 注册 Event Informer Handler（补充通道）
 	eventInformer := w.factory.Core().V1().Events().Informer()
 	eventHandler := NewEventHandler(ctx, w.filter, w.detector, w.logger)
-	if _, err := eventInformer.AddEventHandler(eventHandler.Handler()); err != nil {
+	if _, err := eventInformer.AddEventHandler(w.wrapHandler(eventHandler.Handler())); err != nil {
 		return fmt.Errorf("注册 Event Handler 失败: %w", err)
 	}
 
@@ -98,6 +105,34 @@ func (w *Watcher) Stop() {
 	}
 	w.factory.Shutdown()
 	w.logger.Info("Watcher 已停止")
+}
+
+// wrapHandler 包装 informer handler，在每次事件时触发心跳回调
+func (w *Watcher) wrapHandler(h cache.ResourceEventHandlerFuncs) cache.ResourceEventHandlerFuncs {
+	if w.onHeartbeat == nil {
+		return h
+	}
+	hb := w.onHeartbeat
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			hb()
+			if h.AddFunc != nil {
+				h.AddFunc(obj)
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			hb()
+			if h.UpdateFunc != nil {
+				h.UpdateFunc(oldObj, newObj)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			hb()
+			if h.DeleteFunc != nil {
+				h.DeleteFunc(obj)
+			}
+		},
+	}
 }
 
 // stripManagedFields 去除 managedFields 减少内存占用

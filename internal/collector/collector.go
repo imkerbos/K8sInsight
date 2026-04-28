@@ -9,37 +9,24 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/kerbos/k8sinsight/internal/config"
-	"github.com/kerbos/k8sinsight/internal/detector"
+	"github.com/kerbos/k8sinsight/internal/domain"
 )
 
-// Evidence 采集到的证据
-type Evidence struct {
-	Type      EvidenceType `json:"type"`
-	Content   string       `json:"content"`
-	Timestamp time.Time    `json:"timestamp"`
-	Error     string       `json:"error,omitempty"`
-}
-
-// EvidenceType 证据类型
-type EvidenceType string
+// 证据类型已迁移到 domain 包，这里保持向后兼容
+type Evidence = domain.Evidence
+type EvidenceType = domain.EvidenceType
+type EvidenceBundle = domain.EvidenceBundle
 
 const (
-	EvidencePreviousLogs EvidenceType = "PreviousLogs"
-	EvidenceCurrentLogs  EvidenceType = "CurrentLogs"
-	EvidencePodEvents    EvidenceType = "PodEvents"
-	EvidencePodSnapshot  EvidenceType = "PodSnapshot"
-	EvidencePodDescribe  EvidenceType = "PodDescribe"
-	EvidenceWorkloadSpec EvidenceType = "WorkloadSpec"
-	EvidenceNodeContext  EvidenceType = "NodeContext"
-	EvidenceMetrics      EvidenceType = "Metrics"
+	EvidencePreviousLogs = domain.EvidencePreviousLogs
+	EvidenceCurrentLogs  = domain.EvidenceCurrentLogs
+	EvidencePodEvents    = domain.EvidencePodEvents
+	EvidencePodSnapshot  = domain.EvidencePodSnapshot
+	EvidencePodDescribe  = domain.EvidencePodDescribe
+	EvidenceWorkloadSpec = domain.EvidenceWorkloadSpec
+	EvidenceNodeContext  = domain.EvidenceNodeContext
+	EvidenceMetrics      = domain.EvidenceMetrics
 )
-
-// EvidenceBundle 一次异常采集到的全部证据
-type EvidenceBundle struct {
-	AnomalyEvent detector.AnomalyEvent
-	Evidences    []Evidence
-	CollectedAt  time.Time
-}
 
 // Collector 证据采集编排器
 type Collector struct {
@@ -67,13 +54,13 @@ func (c *Collector) SetConfigLoader(loader func(context.Context) config.CollectC
 
 // HandleAnomaly 实现 detector.EventSink 接口
 // 检测到异常后立即触发证据采集
-func (c *Collector) HandleAnomaly(ctx context.Context, event detector.AnomalyEvent) error {
+func (c *Collector) HandleAnomaly(ctx context.Context, event domain.AnomalyEvent) error {
 	go c.collect(ctx, event)
 	return nil
 }
 
 // collect 并行采集所有证据
-func (c *Collector) collect(ctx context.Context, event detector.AnomalyEvent) {
+func (c *Collector) collect(ctx context.Context, event domain.AnomalyEvent) {
 	cfg := c.cfg
 	if c.cfgLoader != nil {
 		cfg = c.cfgLoader(ctx)

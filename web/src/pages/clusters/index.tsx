@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Table, Button, Tag, Space, Modal, Form, Input, message, Popconfirm, Typography, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -12,6 +13,7 @@ import {
   EditOutlined,
   QuestionCircleOutlined,
   LoadingOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from '../../utils/dayjs'
@@ -161,8 +163,19 @@ export default function ClusterList() {
     {
       title: '集群名称',
       dataIndex: 'name',
-      width: 180,
-      render: (name: string) => <Typography.Text strong style={{ fontSize: 13 }}>{name}</Typography.Text>,
+      width: 200,
+      render: (name: string, record: Cluster) => (
+        <Space size={8}>
+          <Link to={`/clusters/${record.id}/monitor`}>
+            <Typography.Text strong style={{ fontSize: 13, color: '#1890ff' }}>{name}</Typography.Text>
+          </Link>
+          {record.status === 'active' && record.connectionStatus === 'connected' && (
+            <Link to={`/clusters/${record.id}/monitor`}>
+              <DashboardOutlined style={{ fontSize: 12, color: '#8c8c8c' }} title="监控面板" />
+            </Link>
+          )}
+        </Space>
+      ),
     },
     {
       title: '启用状态',
@@ -203,6 +216,22 @@ export default function ClusterList() {
       dataIndex: 'nodeCount',
       width: 70,
       render: (n: number) => <span style={{ fontSize: 13 }}>{n || '-'}</span>,
+    },
+    {
+      title: '最新采集',
+      dataIndex: 'lastEventTime',
+      width: 150,
+      render: (t: string | undefined) => {
+        if (!t) return <span style={{ fontSize: 13, color: '#ccc' }}>暂无</span>
+        const d = dayjs(t)
+        const diffMin = dayjs().diff(d, 'minute')
+        const color = diffMin > 10 ? '#faad14' : '#8c8c8c'
+        return (
+          <Tooltip title={d.format('YYYY-MM-DD HH:mm:ss')}>
+            <span style={{ fontSize: 13, color }}>{d.fromNow()}</span>
+          </Tooltip>
+        )
+      },
     },
     {
       title: '创建时间',

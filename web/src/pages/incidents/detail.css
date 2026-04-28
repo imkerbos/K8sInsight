@@ -65,46 +65,6 @@
   margin-top: 20px;
 }
 
-.incident-chart-wrap {
-  margin-top: 10px;
-}
-
-.incident-chart-legend {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.incident-chart-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #42526e;
-}
-
-.incident-chart-legend-item.danger {
-  color: #cf1322;
-}
-
-.incident-chart-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-
-.incident-chart-svg {
-  display: block;
-  border: 1px solid #ebf0f5;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #fbfcfe 0%, #ffffff 100%);
-}
-
-.incident-chart-meta {
-  display: inline-block;
-  margin-top: 8px;
-}
 
 .incident-stats-row {
   margin-top: 10px;

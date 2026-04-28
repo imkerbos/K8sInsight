@@ -21,27 +21,31 @@ import {
   FundProjectionScreenOutlined,
 } from '@ant-design/icons'
 import zhCN from 'antd/locale/zh_CN'
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { lazy, Suspense, useState, useEffect, useMemo, type ReactNode } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { changePassword } from './api/auth'
 import { getBranding } from './api/settings'
 import { hasPermission } from './utils/permission'
-import Dashboard from './pages/dashboard'
-import IncidentList from './pages/incidents'
-import IncidentDetail from './pages/incidents/detail'
-import ClusterList from './pages/clusters'
-import MonitorRuleList from './pages/monitor-rules'
-import UserManagement from './pages/settings/users'
-import RoleManagement from './pages/settings/roles'
-import SecuritySettings from './pages/settings'
-import CollectSettings from './pages/settings/collect'
-import NotifySettings from './pages/settings/notify'
-import SSOSettings from './pages/settings/sso'
-import BrandingSettings from './pages/settings/branding'
-import AboutPage from './pages/settings/about'
-import LoginPage from './pages/login'
-import SSOCallbackPage from './pages/login/SSOCallback'
-import SSOLoginPage from './pages/login/SSOLogin'
+import ErrorBoundary from './components/ErrorBoundary'
+
+// React.lazy 代码分割 — 按路由懒加载
+const Dashboard = lazy(() => import('./pages/dashboard'))
+const IncidentList = lazy(() => import('./pages/incidents'))
+const IncidentDetail = lazy(() => import('./pages/incidents/detail'))
+const ClusterList = lazy(() => import('./pages/clusters'))
+const ClusterMonitor = lazy(() => import('./pages/clusters/monitor'))
+const MonitorRuleList = lazy(() => import('./pages/monitor-rules'))
+const UserManagement = lazy(() => import('./pages/settings/users'))
+const RoleManagement = lazy(() => import('./pages/settings/roles'))
+const SecuritySettings = lazy(() => import('./pages/settings'))
+const CollectSettings = lazy(() => import('./pages/settings/collect'))
+const NotifySettings = lazy(() => import('./pages/settings/notify'))
+const SSOSettings = lazy(() => import('./pages/settings/sso'))
+const BrandingSettings = lazy(() => import('./pages/settings/branding'))
+const AboutPage = lazy(() => import('./pages/settings/about'))
+const LoginPage = lazy(() => import('./pages/login'))
+const SSOCallbackPage = lazy(() => import('./pages/login/SSOCallback'))
+const SSOLoginPage = lazy(() => import('./pages/login/SSOLogin'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -372,44 +376,51 @@ function AppLayout() {
             border: '1px solid #f0f0f0',
             minHeight: 'calc(100vh - 116px)',
           }}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/incidents" element={
-                <RequirePermission permission="incident:read"><IncidentList /></RequirePermission>
-              } />
-              <Route path="/incidents/:id" element={
-                <RequirePermission permission="incident:read"><IncidentDetail /></RequirePermission>
-              } />
-              <Route path="/clusters" element={
-                <RequirePermission permission="cluster:read"><ClusterList /></RequirePermission>
-              } />
-              <Route path="/monitor-rules" element={
-                <RequirePermission permission="rule:read"><MonitorRuleList /></RequirePermission>
-              } />
-              <Route path="/settings/users" element={
-                <RequirePermission permission="user:manage"><UserManagement /></RequirePermission>
-              } />
-              <Route path="/settings/roles" element={
-                <RequirePermission permission="role:manage"><RoleManagement /></RequirePermission>
-              } />
-              <Route path="/settings/branding" element={
-                <RequirePermission permission="settings:manage"><BrandingSettings /></RequirePermission>
-              } />
-              <Route path="/settings/security" element={
-                <RequirePermission permission="settings:manage"><SecuritySettings /></RequirePermission>
-              } />
-              <Route path="/settings/collect" element={
-                <RequirePermission permission="settings:manage"><CollectSettings /></RequirePermission>
-              } />
-              <Route path="/settings/notify" element={
-                <RequirePermission permission="settings:manage"><NotifySettings /></RequirePermission>
-              } />
-              <Route path="/settings/sso" element={
-                <RequirePermission permission="settings:manage"><SSOSettings /></RequirePermission>
-              } />
-              <Route path="/settings/about" element={<AboutPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <ErrorBoundary>
+              <Suspense fallback={<div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>}>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/incidents" element={
+                    <RequirePermission permission="incident:read"><IncidentList /></RequirePermission>
+                  } />
+                  <Route path="/incidents/:id" element={
+                    <RequirePermission permission="incident:read"><IncidentDetail /></RequirePermission>
+                  } />
+                  <Route path="/clusters" element={
+                    <RequirePermission permission="cluster:read"><ClusterList /></RequirePermission>
+                  } />
+                  <Route path="/clusters/:id/monitor" element={
+                    <RequirePermission permission="cluster:read"><ClusterMonitor /></RequirePermission>
+                  } />
+                  <Route path="/monitor-rules" element={
+                    <RequirePermission permission="rule:read"><MonitorRuleList /></RequirePermission>
+                  } />
+                  <Route path="/settings/users" element={
+                    <RequirePermission permission="user:manage"><UserManagement /></RequirePermission>
+                  } />
+                  <Route path="/settings/roles" element={
+                    <RequirePermission permission="role:manage"><RoleManagement /></RequirePermission>
+                  } />
+                  <Route path="/settings/branding" element={
+                    <RequirePermission permission="settings:manage"><BrandingSettings /></RequirePermission>
+                  } />
+                  <Route path="/settings/security" element={
+                    <RequirePermission permission="settings:manage"><SecuritySettings /></RequirePermission>
+                  } />
+                  <Route path="/settings/collect" element={
+                    <RequirePermission permission="settings:manage"><CollectSettings /></RequirePermission>
+                  } />
+                  <Route path="/settings/notify" element={
+                    <RequirePermission permission="settings:manage"><NotifySettings /></RequirePermission>
+                  } />
+                  <Route path="/settings/sso" element={
+                    <RequirePermission permission="settings:manage"><SSOSettings /></RequirePermission>
+                  } />
+                  <Route path="/settings/about" element={<AboutPage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </Content>
       </Layout>

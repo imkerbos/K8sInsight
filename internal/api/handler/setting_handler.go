@@ -15,6 +15,7 @@ import (
 
 	"github.com/kerbos/k8sinsight/internal/detector"
 	"github.com/kerbos/k8sinsight/internal/notify/sink"
+	"github.com/kerbos/k8sinsight/internal/service"
 	"github.com/kerbos/k8sinsight/internal/store/model"
 	"github.com/kerbos/k8sinsight/internal/store/repository"
 )
@@ -60,10 +61,9 @@ var collectKeys = map[string]string{
 
 // SettingHandler 系统设置 API 处理器
 type SettingHandler struct {
-	settingRepo  repository.SettingRepository
-	incidentRepo repository.IncidentRepository
-	evidenceRepo repository.EvidenceRepository
-	logger       *zap.Logger
+	settingRepo repository.SettingRepository
+	incidentSvc *service.IncidentService
+	logger      *zap.Logger
 }
 
 type NotifyTestRequest struct {
@@ -125,15 +125,13 @@ type promInstantResponse struct {
 
 func NewSettingHandler(
 	settingRepo repository.SettingRepository,
-	incidentRepo repository.IncidentRepository,
-	evidenceRepo repository.EvidenceRepository,
+	incidentSvc *service.IncidentService,
 	logger *zap.Logger,
 ) *SettingHandler {
 	return &SettingHandler{
-		settingRepo:  settingRepo,
-		incidentRepo: incidentRepo,
-		evidenceRepo: evidenceRepo,
-		logger:       logger.Named("api.setting"),
+		settingRepo: settingRepo,
+		incidentSvc: incidentSvc,
+		logger:      logger.Named("api.setting"),
 	}
 }
 
@@ -681,14 +679,14 @@ func (h *SettingHandler) fillNotifyCredentialFromSettings(ctx context.Context, r
 }
 
 func (h *SettingHandler) buildEventFromIncident(ctx context.Context, incidentID string) (detector.AnomalyEvent, error) {
-	if h.incidentRepo == nil || h.evidenceRepo == nil {
-		return detector.AnomalyEvent{}, fmt.Errorf("事件证据仓储未初始化")
+	if h.incidentSvc == nil {
+		return detector.AnomalyEvent{}, fmt.Errorf("事件服务未初始化")
 	}
-	inc, err := h.incidentRepo.FindByID(ctx, incidentID)
+	inc, err := h.incidentSvc.GetByID(ctx, incidentID)
 	if err != nil {
 		return detector.AnomalyEvent{}, fmt.Errorf("查询事件失败: %w", err)
 	}
-	evidences, err := h.evidenceRepo.FindByIncidentID(ctx, incidentID)
+	evidences, err := h.incidentSvc.GetEvidences(ctx, incidentID)
 	if err != nil {
 		return detector.AnomalyEvent{}, fmt.Errorf("查询证据失败: %w", err)
 	}

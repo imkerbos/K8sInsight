@@ -1,16 +1,97 @@
-package aggregator
+package incident
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/kerbos/k8sinsight/internal/collector"
+	"go.uber.org/zap"
+
 	"github.com/kerbos/k8sinsight/internal/detector"
+	"github.com/kerbos/k8sinsight/internal/domain"
+	"github.com/kerbos/k8sinsight/internal/pipeline/dedup"
+	"github.com/kerbos/k8sinsight/internal/store/repository"
 )
 
-func buildEvidenceDrivenEvent(incidentID string, event detector.AnomalyEvent, evidences []collector.Evidence) detector.AnomalyEvent {
+// EvidenceProcessor 消费证据 channel，保存到 DB 并触发通知
+type EvidenceProcessor struct {
+	input        <-chan domain.EvidenceBundle
+	index        *dedup.Index
+	evidenceRepo repository.EvidenceRepository
+	notifier     detector.EventSink
+	workers      int
+	logger       *zap.Logger
+}
+
+// NewEvidenceProcessor 创建证据处理器
+func NewEvidenceProcessor(
+	input <-chan domain.EvidenceBundle,
+	index *dedup.Index,
+	evidenceRepo repository.EvidenceRepository,
+	notifier detector.EventSink,
+	workers int,
+	logger *zap.Logger,
+) *EvidenceProcessor {
+	if workers <= 0 {
+		workers = 4
+	}
+	return &EvidenceProcessor{
+		input:        input,
+		index:        index,
+		evidenceRepo: evidenceRepo,
+		notifier:     notifier,
+		workers:      workers,
+		logger:       logger.Named("evidence-proc"),
+	}
+}
+
+// Start 启动 worker pool 消费证据
+func (p *EvidenceProcessor) Start(ctx context.Context) {
+	for i := 0; i < p.workers; i++ {
+		go p.worker(ctx)
+	}
+}
+
+func (p *EvidenceProcessor) worker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case bundle, ok := <-p.input:
+			if !ok {
+				return
+			}
+			p.processBundle(ctx, bundle)
+		}
+	}
+}
+
+func (p *EvidenceProcessor) processBundle(ctx context.Context, bundle domain.EvidenceBundle) {
+	dedupKey := bundle.AnomalyEvent.DedupKey()
+	inc, found := p.index.FindActive(dedupKey)
+	if !found {
+		p.logger.Warn("证据对应的事件未找到", zap.String("dedupKey", dedupKey))
+		return
+	}
+
+	if err := p.evidenceRepo.SaveBundle(ctx, inc.ID, &bundle); err != nil {
+		p.logger.Error("保存证据失败", zap.Error(err))
+	}
+
+	// 证据驱动通知：基于已采集证据生成数据化结论后再发送
+	if p.notifier != nil {
+		enriched := buildEvidenceDrivenEvent(inc.ID, bundle.AnomalyEvent, bundle.Evidences)
+		if err := p.notifier.HandleAnomaly(ctx, enriched); err != nil {
+			p.logger.Error("发送证据驱动通知失败", zap.Error(err))
+		}
+	}
+}
+
+// === Evidence Analysis (migrated from aggregator/evidence_analysis.go) ===
+
+func buildEvidenceDrivenEvent(incidentID string, event domain.AnomalyEvent, evidences []domain.Evidence) domain.AnomalyEvent {
 	lines := []string{
 		event.Message,
 		"",
@@ -22,7 +103,7 @@ func buildEvidenceDrivenEvent(incidentID string, event detector.AnomalyEvent, ev
 	return event
 }
 
-func analyzeByType(event detector.AnomalyEvent, evidences []collector.Evidence) []string {
+func analyzeByType(event domain.AnomalyEvent, evidences []domain.Evidence) []string {
 	pod := parsePodSnapshot(evidences, event.ContainerName)
 	peakMem, latestMem := parsePromMemory(evidences)
 	latestEvent := parseLatestPodEvent(evidences)
@@ -44,23 +125,23 @@ func analyzeByType(event detector.AnomalyEvent, evidences []collector.Evidence) 
 	}
 
 	switch event.Type {
-	case detector.AnomalyOOMKilled:
+	case domain.AnomalyOOMKilled:
 		if pod != nil && pod.LimitMemory != "" {
 			out = append(out, "结论=容器达到或逼近内存上限后被内核OOMKill")
 		} else {
 			out = append(out, "结论=检测到OOMKill，需补齐内存limit与用量数据进一步确认")
 		}
-	case detector.AnomalyCrashLoopBackOff:
+	case domain.AnomalyCrashLoopBackOff:
 		out = append(out, "结论=容器反复失败重启，需结合启动日志与退出码定位首因")
-	case detector.AnomalyErrorExit:
+	case domain.AnomalyErrorExit:
 		out = append(out, "结论=非OOM异常退出，优先根据退出码+日志定位")
-	case detector.AnomalyImagePullBackOff:
+	case domain.AnomalyImagePullBackOff:
 		out = append(out, "结论=镜像拉取路径异常（仓库可达性/鉴权/tag）")
-	case detector.AnomalyCreateContainerConfigError:
+	case domain.AnomalyCreateContainerConfigError:
 		out = append(out, "结论=容器配置依赖异常（ConfigMap/Secret/挂载）")
-	case detector.AnomalyFailedScheduling:
+	case domain.AnomalyFailedScheduling:
 		out = append(out, "结论=调度约束或资源不足导致未能落点")
-	case detector.AnomalyEvicted:
+	case domain.AnomalyEvicted:
 		out = append(out, "结论=节点资源压力触发驱逐（内存/磁盘）")
 	}
 
@@ -78,7 +159,7 @@ type podContainerInfo struct {
 	LimitMemory   string
 }
 
-func parsePodSnapshot(evidences []collector.Evidence, container string) *podContainerInfo {
+func parsePodSnapshot(evidences []domain.Evidence, container string) *podContainerInfo {
 	type resources struct {
 		RequestsMemory string `json:"requestsMemory"`
 		LimitsMemory   string `json:"limitsMemory"`
@@ -94,7 +175,7 @@ func parsePodSnapshot(evidences []collector.Evidence, container string) *podCont
 		Containers []containerDigest `json:"containers"`
 	}
 	for _, e := range evidences {
-		if e.Type != collector.EvidencePodSnapshot || e.Content == "" {
+		if e.Type != domain.EvidencePodSnapshot || e.Content == "" {
 			continue
 		}
 		var p podDigest
@@ -106,10 +187,8 @@ func parsePodSnapshot(evidences []collector.Evidence, container string) *podCont
 				continue
 			}
 			info := &podContainerInfo{
-				LastState:     c.LastState,
-				RestartCount:  c.RestartCount,
-				RequestMemory: "",
-				LimitMemory:   "",
+				LastState:    c.LastState,
+				RestartCount: c.RestartCount,
 			}
 			if c.ExitCode != nil {
 				info.ExitCode = *c.ExitCode
@@ -124,14 +203,14 @@ func parsePodSnapshot(evidences []collector.Evidence, container string) *podCont
 	return nil
 }
 
-func parseLatestPodEvent(evidences []collector.Evidence) string {
+func parseLatestPodEvent(evidences []domain.Evidence) string {
 	type eventSummary struct {
 		Reason  string `json:"reason"`
 		Message string `json:"message"`
 	}
 	for i := len(evidences) - 1; i >= 0; i-- {
 		e := evidences[i]
-		if e.Type != collector.EvidencePodEvents || e.Content == "" {
+		if e.Type != domain.EvidencePodEvents || e.Content == "" {
 			continue
 		}
 		var list []eventSummary
@@ -144,7 +223,7 @@ func parseLatestPodEvent(evidences []collector.Evidence) string {
 	return ""
 }
 
-func parsePromMemory(evidences []collector.Evidence) (peakBytes, latestBytes float64) {
+func parsePromMemory(evidences []domain.Evidence) (peakBytes, latestBytes float64) {
 	type matrixSeries struct {
 		Values [][]any `json:"values"`
 	}
@@ -155,7 +234,7 @@ func parsePromMemory(evidences []collector.Evidence) (peakBytes, latestBytes flo
 		} `json:"series"`
 	}
 	for _, e := range evidences {
-		if e.Type != collector.EvidenceMetrics || e.Content == "" {
+		if e.Type != domain.EvidenceMetrics || e.Content == "" {
 			continue
 		}
 		var b bundle

@@ -11,7 +11,7 @@ import (
 )
 
 // EventSink 异常事件输出接口
-// Collector、Aggregator 等下游模块实现此接口
+// 通知等下游模块实现此接口
 type EventSink interface {
 	HandleAnomaly(ctx context.Context, event AnomalyEvent) error
 }
@@ -19,16 +19,17 @@ type EventSink interface {
 // Detector 异常检测引擎
 type Detector struct {
 	rules     []Rule
-	sinks     []EventSink
+	output    chan<- AnomalyEvent
 	clientset kubernetes.Interface
 	clusterID string
 	logger    *zap.Logger
 }
 
 // NewDetector 创建异常检测引擎
-func NewDetector(clientset kubernetes.Interface, logger *zap.Logger) *Detector {
+func NewDetector(clientset kubernetes.Interface, output chan<- AnomalyEvent, logger *zap.Logger) *Detector {
 	d := &Detector{
 		clientset: clientset,
+		output:    output,
 		logger:    logger.Named("detector"),
 	}
 	// 注册默认规则
@@ -41,11 +42,6 @@ func NewDetector(clientset kubernetes.Interface, logger *zap.Logger) *Detector {
 		NewEvictedRule(),
 	}
 	return d
-}
-
-// AddSink 注册异常事件消费方
-func (d *Detector) AddSink(sink EventSink) {
-	d.sinks = append(d.sinks, sink)
 }
 
 // AddRule 注册自定义检测规则
@@ -134,9 +130,11 @@ func (d *Detector) dispatch(ctx context.Context, event AnomalyEvent) {
 		zap.String("message", event.Message),
 	)
 
-	for _, sink := range d.sinks {
-		if err := sink.HandleAnomaly(ctx, event); err != nil {
-			d.logger.Error("分发异常事件失败", zap.Error(err))
-		}
+	select {
+	case d.output <- event:
+	case <-ctx.Done():
+		d.logger.Warn("分发异常事件失败：上下文已取消", zap.String("pod", event.PodName))
+	default:
+		d.logger.Warn("异常事件 channel 已满，丢弃事件", zap.String("pod", event.PodName))
 	}
 }

@@ -19,8 +19,10 @@ import (
 	"github.com/kerbos/k8sinsight/internal/cluster"
 	"github.com/kerbos/k8sinsight/internal/config"
 	"github.com/kerbos/k8sinsight/internal/core"
+	"github.com/kerbos/k8sinsight/internal/infra/postgres"
+	"github.com/kerbos/k8sinsight/internal/infra/retention"
+	"github.com/kerbos/k8sinsight/internal/service"
 	"github.com/kerbos/k8sinsight/internal/store"
-	"github.com/kerbos/k8sinsight/internal/store/repository"
 )
 
 func main() {
@@ -67,13 +69,13 @@ func main() {
 	defer cancel()
 
 	// 初始化 Repository
-	incidentRepo := repository.NewIncidentRepository(db)
-	evidenceRepo := repository.NewEvidenceRepository(db)
-	clusterRepo := repository.NewClusterRepository(db)
-	monitorRuleRepo := repository.NewMonitorRuleRepository(db)
-	userRepo := repository.NewUserRepository(db)
-	settingRepo := repository.NewSettingRepository(db)
-	roleRepo := repository.NewRoleRepository(db)
+	incidentRepo := postgres.NewIncidentRepository(db)
+	evidenceRepo := postgres.NewEvidenceRepository(db)
+	clusterRepo := postgres.NewClusterRepository(db)
+	monitorRuleRepo := postgres.NewMonitorRuleRepository(db)
+	userRepo := postgres.NewUserRepository(db)
+	settingRepo := postgres.NewSettingRepository(db)
+	roleRepo := postgres.NewRoleRepository(db)
 
 	// 初始化 TokenService
 	jwtSecret := cfg.Server.JWTSecret
@@ -113,8 +115,16 @@ func main() {
 		logger.Error("重载活跃集群失败", zap.Error(err))
 	}
 
+	// 启动数据保留后台任务
+	retentionJob := retention.NewJob(db, retention.DefaultConfig(), logger)
+	retentionJob.Start(ctx)
+
+	// 初始化 Service 层
+	incidentSvc := service.NewIncidentService(incidentRepo, evidenceRepo, settingRepo, logger)
+	clusterSvc := service.NewClusterService(clusterRepo, clusterMgr, logger)
+
 	// 启动 HTTP 服务
-	router := api.NewRouter(incidentRepo, evidenceRepo, clusterRepo, monitorRuleRepo, userRepo, settingRepo, roleRepo, clusterMgr, tokenService, ssoService, logger)
+	router := api.NewRouter(incidentSvc, clusterSvc, clusterRepo, monitorRuleRepo, userRepo, settingRepo, roleRepo, tokenService, ssoService, logger)
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      router,

@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -28,6 +29,8 @@ func NewDB(cfg config.DBConfig, logger *zap.Logger) (*gorm.DB, error) {
 
 	sqlDB.SetMaxOpenConns(cfg.MaxConns)
 	sqlDB.SetMaxIdleConns(cfg.MinConns)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
 
 	// 自动迁移表结构
 	if err := db.AutoMigrate(

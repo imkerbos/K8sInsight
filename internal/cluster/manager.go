@@ -14,25 +14,31 @@ import (
 	"gorm.io/gorm"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/kerbos/k8sinsight/internal/aggregator"
 	"github.com/kerbos/k8sinsight/internal/collector"
 	"github.com/kerbos/k8sinsight/internal/config"
 	"github.com/kerbos/k8sinsight/internal/core"
 	"github.com/kerbos/k8sinsight/internal/detector"
+	"github.com/kerbos/k8sinsight/internal/domain"
 	"github.com/kerbos/k8sinsight/internal/notify"
 	"github.com/kerbos/k8sinsight/internal/notify/sink"
+	"github.com/kerbos/k8sinsight/internal/pipeline/dedup"
+	"github.com/kerbos/k8sinsight/internal/pipeline/incident"
 	"github.com/kerbos/k8sinsight/internal/store/model"
 	"github.com/kerbos/k8sinsight/internal/store/repository"
 	"github.com/kerbos/k8sinsight/internal/watcher"
 )
 
+const heartbeatThrottle = 30 * time.Second
+
 // Pipeline 表示一个集群的完整 watcher 管道
 type Pipeline struct {
-	ClusterID  string
-	clientset  kubernetes.Interface
-	watcher    *watcher.Watcher
-	aggregator *aggregator.Aggregator
-	cancelFunc context.CancelFunc
+	ClusterID      string
+	clientset      kubernetes.Interface
+	watcher        *watcher.Watcher
+	incidentMgr    *incident.Manager
+	evidenceProc   *incident.EvidenceProcessor
+	cancelFunc     context.CancelFunc
+	lastWriteAt    time.Time // 上次心跳写 DB 的时间，用于节流
 }
 
 // Manager 管理所有集群的 watcher 管道生命周期
@@ -71,6 +77,7 @@ func NewManager(
 }
 
 // StartCluster 为指定集群创建并启动完整的 watcher 管道
+// ctx 仅用于数据库等短生命周期操作，管道本身使用独立的 background context
 func (m *Manager) StartCluster(ctx context.Context, cluster *model.Cluster) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -89,44 +96,93 @@ func (m *Manager) StartCluster(ctx context.Context, cluster *model.Cluster) erro
 	// 构建 WatchConfig
 	watchCfg := m.buildWatchConfig(cluster)
 
-	// 创建管道 context
-	pipelineCtx, cancel := context.WithCancel(ctx)
+	// 管道使用独立的 context，不绑定 HTTP 请求生命周期
+	// 避免 HTTP 请求结束后 context 被取消导致管道停止
+	pipelineCtx, cancel := context.WithCancel(context.Background())
 
-	// 证据传输 channel
-	evidenceCh := make(chan collector.EvidenceBundle, 100)
+	// 异常事件 channel（Detector → fan-out）
+	anomalyCh := make(chan domain.AnomalyEvent, 200)
+
+	// 证据传输 channel（Collector → EvidenceProcessor）
+	evidenceCh := make(chan domain.EvidenceBundle, 100)
 
 	// 初始化组件
-	det := detector.NewDetector(clientset, m.logger)
+	det := detector.NewDetector(clientset, anomalyCh, m.logger)
 	det.SetClusterID(cluster.ID)
 
 	col := collector.NewCollector(clientset, m.cfg.Collect, evidenceCh, m.logger)
 	col.SetConfigLoader(m.loadCollectConfig)
 
+	// 去重索引 + Incident 管理器
+	dedupIdx := dedup.NewIndex(10000)
+	incMgr := incident.NewManager(dedupIdx, m.incidentRepo, m.cfg.Watch.Aggregation, m.logger)
+
+	// 证据处理器 + 通知
 	dispatcher := notify.NewDynamicDispatcher(m.loadNotifyNotifiers, m.logger)
-	agg := aggregator.NewAggregator(m.cfg.Watch.Aggregation, m.incidentRepo, m.evidenceRepo, dispatcher, evidenceCh, m.logger)
+	evProc := incident.NewEvidenceProcessor(evidenceCh, dedupIdx, m.evidenceRepo, dispatcher, 4, m.logger)
 
-	// 注册 EventSink
-	det.AddSink(col)
-	det.AddSink(agg)
+	// 启动 fan-out：异常事件并行分发给 Collector 和 IncidentManager
+	go func() {
+		for {
+			select {
+			case <-pipelineCtx.Done():
+				return
+			case event, ok := <-anomalyCh:
+				if !ok {
+					return
+				}
+				// 并行分发：Collector 和 IncidentManager 互不阻塞
+				go col.HandleAnomaly(pipelineCtx, event)
+				go func(ev domain.AnomalyEvent) {
+					if err := incMgr.HandleAnomaly(pipelineCtx, ev); err != nil {
+						m.logger.Error("IncidentManager 处理异常失败", zap.Error(err))
+					}
+				}(event)
+			}
+		}
+	}()
 
-	// 启动聚合引擎
-	agg.Start(pipelineCtx)
+	// 启动 Incident 管理器和证据处理器
+	incMgr.Start(pipelineCtx)
+	evProc.Start(pipelineCtx)
 
 	// 创建并启动 Watcher
 	w := watcher.New(clientset, watchCfg, det, m.logger)
+
+	// 设置心跳回调：收到 K8s 事件时节流写入 last_event_time
+	pipeline := &Pipeline{
+		ClusterID:    cluster.ID,
+		clientset:    clientset,
+		watcher:      w,
+		incidentMgr:  incMgr,
+		evidenceProc: evProc,
+		cancelFunc:   cancel,
+	}
+	clusterID := cluster.ID
+	w.SetOnHeartbeat(func() {
+		now := time.Now()
+		m.mu.RLock()
+		p := m.pipelines[clusterID]
+		m.mu.RUnlock()
+		if p == nil {
+			return
+		}
+		if now.Sub(p.lastWriteAt) < heartbeatThrottle {
+			return
+		}
+		p.lastWriteAt = now
+		if err := m.clusterRepo.UpdateLastEventTime(context.Background(), clusterID, now); err != nil {
+			m.logger.Warn("更新集群心跳时间失败", zap.String("clusterID", clusterID), zap.Error(err))
+		}
+	})
+
 	if err := w.Start(pipelineCtx); err != nil {
 		cancel()
 		m.updateClusterConnectionStatus(ctx, cluster.ID, "failed", err.Error())
 		return fmt.Errorf("Watcher 启动失败: %w", err)
 	}
 
-	m.pipelines[cluster.ID] = &Pipeline{
-		ClusterID:  cluster.ID,
-		clientset:  clientset,
-		watcher:    w,
-		aggregator: agg,
-		cancelFunc: cancel,
-	}
+	m.pipelines[cluster.ID] = pipeline
 
 	m.updateClusterConnectionStatus(ctx, cluster.ID, "connected", "")
 	m.logger.Info("集群管道已启动",
@@ -343,6 +399,23 @@ func (m *Manager) IsRunning(clusterID string) bool {
 	defer m.mu.RUnlock()
 	_, exists := m.pipelines[clusterID]
 	return exists
+}
+
+// GetClientset 获取运行中集群的 K8s 客户端（用于实时查询）
+func (m *Manager) GetClientset(clusterID string) (kubernetes.Interface, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	p, ok := m.pipelines[clusterID]
+	if !ok {
+		return nil, false
+	}
+	return p.clientset, true
+}
+
+// GetPrometheusURL 从动态设置读取 Prometheus 地址
+func (m *Manager) GetPrometheusURL(ctx context.Context) string {
+	cfg := m.loadCollectConfig(ctx)
+	return cfg.PrometheusURL
 }
 
 // buildWatchConfig 根据监控规则构建 WatchConfig

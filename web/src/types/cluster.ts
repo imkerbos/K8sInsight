@@ -6,6 +6,7 @@ export interface Cluster {
   statusMessage?: string
   version?: string
   nodeCount: number
+  lastEventTime?: string
   createdAt: string
   updatedAt: string
 }

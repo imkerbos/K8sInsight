@@ -2,40 +2,47 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/kerbos/k8sinsight/internal/api/handler"
 	"github.com/kerbos/k8sinsight/internal/api/middleware"
 	"github.com/kerbos/k8sinsight/internal/auth"
-	"github.com/kerbos/k8sinsight/internal/cluster"
+	"github.com/kerbos/k8sinsight/internal/service"
 	"github.com/kerbos/k8sinsight/internal/store/repository"
 )
 
 // NewRouter 创建并配置 Gin 路由
 func NewRouter(
-	incidentRepo repository.IncidentRepository,
-	evidenceRepo repository.EvidenceRepository,
+	incidentSvc *service.IncidentService,
+	clusterSvc *service.ClusterService,
 	clusterRepo repository.ClusterRepository,
 	monitorRuleRepo repository.MonitorRuleRepository,
 	userRepo repository.UserRepository,
 	settingRepo repository.SettingRepository,
 	roleRepo repository.RoleRepository,
-	clusterMgr *cluster.Manager,
 	tokenService *auth.TokenService,
 	ssoService *auth.SSOService,
 	logger *zap.Logger,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+
+	// 全局中间件
 	r.Use(gin.Recovery())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.CORS(nil)) // nil = allow all origins
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(middleware.Metrics())
 
 	// 权限检查器
 	permChecker := middleware.NewPermissionChecker(roleRepo)
 
-	// 健康检查（不需要认证）
+	// 健康检查 + Prometheus 指标（不需要认证）
 	healthHandler := handler.NewHealthHandler()
 	r.GET("/healthz", healthHandler.Healthz)
 	r.GET("/readyz", healthHandler.Readyz)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 认证处理器
 	authHandler := handler.NewAuthHandler(userRepo, roleRepo, tokenService, logger)
@@ -53,8 +60,11 @@ func NewRouter(
 	authPublic.GET("/sso/authorize", ssoHandler.Authorize)
 	authPublic.POST("/sso/callback", ssoHandler.Callback)
 
+	// IdP-initiated SSO 入口
+	r.POST("/auth/sso/login", ssoHandler.Callback)
+
 	// 公开设置端点（登录页需要展示品牌信息）
-	settingHandler := handler.NewSettingHandler(settingRepo, incidentRepo, evidenceRepo, logger)
+	settingHandler := handler.NewSettingHandler(settingRepo, incidentSvc, logger)
 	r.GET("/api/v1/settings/branding", settingHandler.GetBranding)
 
 	// API v1（需要 JWT 认证）
@@ -70,7 +80,7 @@ func NewRouter(
 		}
 
 		// 事件管理
-		incidentHandler := handler.NewIncidentHandler(incidentRepo, evidenceRepo, settingRepo, logger)
+		incidentHandler := handler.NewIncidentHandler(incidentSvc, logger)
 		v1.GET("/incidents", permChecker.RequirePermission("incident:read"), incidentHandler.List)
 		v1.GET("/incidents/:id", permChecker.RequirePermission("incident:read"), incidentHandler.Get)
 		v1.GET("/incidents/:id/evidences", permChecker.RequirePermission("incident:read"), incidentHandler.GetEvidences)
@@ -78,7 +88,7 @@ func NewRouter(
 		v1.POST("/incidents/:id/recollect-metrics", permChecker.RequirePermission("incident:read"), permChecker.RequirePermission("settings:manage"), incidentHandler.RecollectMetrics)
 
 		// 集群管理
-		clusterHandler := handler.NewClusterHandler(clusterRepo, clusterMgr, logger)
+		clusterHandler := handler.NewClusterHandler(clusterSvc, logger)
 		v1.GET("/clusters", permChecker.RequirePermission("cluster:read"), clusterHandler.List)
 		v1.GET("/clusters/:id", permChecker.RequirePermission("cluster:read"), clusterHandler.Get)
 		v1.POST("/clusters", permChecker.RequirePermission("cluster:write"), clusterHandler.Create)
@@ -87,6 +97,7 @@ func NewRouter(
 		v1.POST("/clusters/:id/test", permChecker.RequirePermission("cluster:write"), clusterHandler.TestConnection)
 		v1.POST("/clusters/:id/activate", permChecker.RequirePermission("cluster:write"), clusterHandler.Activate)
 		v1.POST("/clusters/:id/deactivate", permChecker.RequirePermission("cluster:write"), clusterHandler.Deactivate)
+		v1.GET("/clusters/:id/metrics", permChecker.RequirePermission("cluster:read"), clusterHandler.Metrics)
 
 		// 监控规则
 		monitorRuleHandler := handler.NewMonitorRuleHandler(monitorRuleRepo, clusterRepo, logger)

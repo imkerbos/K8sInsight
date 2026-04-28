@@ -22,6 +22,8 @@ import { listClusters } from '../../api/clusters'
 import { useAuth } from '../../contexts/AuthContext'
 import { hasPermission } from '../../utils/permission'
 import type { Evidence, Incident } from '../../types/incident'
+import TimeSeriesChart from '../../components/TimeSeriesChart'
+import type { TimeValue } from '../../components/TimeSeriesChart'
 import './detail.css'
 
 const { Text, Title } = Typography
@@ -477,11 +479,6 @@ function downloadTextFile(filename: string, content: string, mimeType = 'text/pl
   URL.revokeObjectURL(url)
 }
 
-type TimeValue = {
-  ts: number
-  value: number
-}
-
 function toTimeValues(values: PromSample[] | undefined): TimeValue[] {
   if (!values) return []
   return values
@@ -531,136 +528,6 @@ function parseK8sMemoryToMiB(raw?: string): number | null {
   if (bin[unit] !== undefined) return value * bin[unit]
   if (dec[unit] !== undefined) return value * dec[unit]
   return null
-}
-
-function TimeSeriesChart({
-  samples,
-  color,
-  height = 220,
-  unit,
-  seriesLabel,
-  limitValue,
-  limitLabel,
-}: {
-  samples: TimeValue[]
-  color: string
-  height?: number
-  unit: string
-  seriesLabel: string
-  limitValue?: number | null
-  limitLabel?: string
-}) {
-  const width = 760
-  const padding = { top: 20, right: 16, bottom: 34, left: 52 }
-  const plotW = width - padding.left - padding.right
-  const plotH = height - padding.top - padding.bottom
-
-  if (!samples.length) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无曲线数据" />
-  }
-
-  const values = samples.map((s) => s.value)
-  const sourceMin = Math.min(...values)
-  const sourceMax = Math.max(...values)
-  const max = limitValue && Number.isFinite(limitValue) ? Math.max(sourceMax, limitValue) : sourceMax
-  const min = Math.min(0, sourceMin)
-  const range = max - min || 1
-  const stepX = samples.length > 1 ? plotW / (samples.length - 1) : plotW
-
-  const pointPairs = samples.map((v, i) => {
-    const x = padding.left + i * stepX
-    const y = padding.top + plotH - ((v.value - min) / range) * plotH
-    return { x, y }
-  })
-
-  const linePoints = pointPairs.map((p) => `${p.x},${p.y}`).join(' ')
-  const areaPoints = [
-    `${padding.left},${padding.top + plotH}`,
-    ...pointPairs.map((p) => `${p.x},${p.y}`),
-    `${padding.left + plotW},${padding.top + plotH}`,
-  ].join(' ')
-
-  const firstTs = dayjs.unix(samples[0].ts).format('HH:mm:ss')
-  const lastTs = dayjs.unix(samples[samples.length - 1].ts).format('HH:mm:ss')
-  const stepSec = samples.length > 1 ? Math.round(samples[1].ts - samples[0].ts) : 0
-
-  const yTickValues = [max, min + (range * 2) / 3, min + range / 3, min]
-  const xTicks = [0, 0.25, 0.5, 0.75, 1].map((r) => {
-    const idx = Math.min(samples.length - 1, Math.round((samples.length - 1) * r))
-    const x = padding.left + plotW * r
-    const label = dayjs.unix(samples[idx].ts).format('HH:mm:ss')
-    return { x, label }
-  })
-
-  const limitY = limitValue && Number.isFinite(limitValue)
-    ? padding.top + plotH - (((limitValue as number) - min) / range) * plotH
-    : null
-
-  const gradientId = `trend-${seriesLabel.replace(/\s+/g, '-').toLowerCase()}`
-
-  return (
-    <div className="incident-chart-wrap">
-      <div className="incident-chart-legend">
-        <span className="incident-chart-legend-item">
-          <span className="incident-chart-dot" style={{ backgroundColor: color }} />
-          {seriesLabel}
-        </span>
-        {limitY !== null && (
-          <span className="incident-chart-legend-item danger">Limit: {limitLabel || `${fmtNumber(limitValue as number)} ${unit}`}</span>
-        )}
-      </div>
-
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="incident-chart-svg" role="img" aria-label={seriesLabel}>
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {yTickValues.map((v, i) => {
-          const y = padding.top + (plotH * i) / (yTickValues.length - 1)
-          return (
-            <g key={`y-${i}`}>
-              <line x1={padding.left} y1={y} x2={padding.left + plotW} y2={y} stroke="#e6edf7" strokeWidth="1" />
-              <text x={8} y={y + 4} fontSize="10" fill="#7b8ca7">{fmtNumber(v)} {unit}</text>
-            </g>
-          )
-        })}
-
-        {xTicks.map((t, i) => (
-          <g key={`x-${i}`}>
-            <line x1={t.x} y1={padding.top} x2={t.x} y2={padding.top + plotH} stroke="#f1f5fa" strokeWidth="1" />
-            <text x={t.x - 18} y={height - 10} fontSize="10" fill="#7b8ca7">{t.label}</text>
-          </g>
-        ))}
-
-        {limitY !== null && (
-          <>
-            <line
-              x1={padding.left}
-              y1={limitY}
-              x2={padding.left + plotW}
-              y2={limitY}
-              stroke="#ff4d4f"
-              strokeWidth="1.4"
-              strokeDasharray="5 4"
-            />
-            <text x={padding.left + plotW - 120} y={limitY - 5} fontSize="10" fill="#cf1322">
-              limit {limitLabel || `${fmtNumber(limitValue as number)} ${unit}`}
-            </text>
-          </>
-        )}
-
-        <polyline fill={`url(#${gradientId})`} stroke="none" points={areaPoints} />
-        <polyline fill="none" stroke={color} strokeWidth="2.2" points={linePoints} />
-      </svg>
-
-      <Text type="secondary" className="incident-chart-meta">
-        时间范围: {firstTs} - {lastTs}，采样点: {samples.length}，间隔: {stepSec > 0 ? `${stepSec}s` : '-'}
-      </Text>
-    </div>
-  )
 }
 
 /** 单条证据渲染 */

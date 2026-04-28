@@ -19,7 +19,14 @@ client.interceptors.request.use((config) => {
 let refreshing: Promise<string> | null = null
 
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // 统一响应信封解包：{code, message, data} → data
+    const body = response.data
+    if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+      response.data = body.data
+    }
+    return response
+  },
   async (error) => {
     const original = error.config
     if (error.response?.status !== 401 || original._retry) {
