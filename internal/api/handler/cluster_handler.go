@@ -116,6 +116,16 @@ func (h *ClusterHandler) TestConnection(c *gin.Context) {
 	response.OK(c, result)
 }
 
+// TestPrometheus 测试集群的 Prometheus/VictoriaMetrics 连接
+func (h *ClusterHandler) TestPrometheus(c *gin.Context) {
+	result, err := h.svc.TestPrometheus(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.OK(c, result)
+}
+
 // Activate 启用集群
 func (h *ClusterHandler) Activate(c *gin.Context) {
 	_, err := h.svc.Activate(c.Request.Context(), c.Param("id"))

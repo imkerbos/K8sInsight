@@ -25,6 +25,7 @@ import {
   activateCluster,
   deactivateCluster,
   testClusterConnection,
+  testPrometheusConnection,
 } from '../../api/clusters'
 import { useAuth } from '../../contexts/AuthContext'
 import { hasPermission } from '../../utils/permission'
@@ -44,6 +45,7 @@ export default function ClusterList() {
 
   // 测试连接中的集群 ID
   const [testingId, setTestingId] = useState<string | null>(null)
+  const [testingPromId, setTestingPromId] = useState<string | null>(null)
 
   const { data: clusters, isLoading } = useQuery({
     queryKey: ['clusters'],
@@ -127,6 +129,22 @@ export default function ClusterList() {
       message.error('测试请求失败')
     } finally {
       setTestingId(null)
+    }
+  }
+
+  const handleTestPrometheus = async (id: string) => {
+    setTestingPromId(id)
+    try {
+      const result = await testPrometheusConnection(id)
+      if (result.success) {
+        message.success(result.message || '监控连接成功')
+      } else {
+        message.error(`监控连接失败: ${result.error}`)
+      }
+    } catch {
+      message.error('监控测试请求失败')
+    } finally {
+      setTestingPromId(null)
     }
   }
 
@@ -246,7 +264,7 @@ export default function ClusterList() {
           {
             title: '操作',
             key: 'actions',
-            width: 280,
+            width: 340,
             render: (_: unknown, record: Cluster) => (
               <Space size={4}>
                 <Button
@@ -257,7 +275,17 @@ export default function ClusterList() {
                   disabled={testingId !== null}
                   style={{ color: '#1890ff' }}
                 >
-                  测试
+                  集群
+                </Button>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={testingPromId === record.id ? <LoadingOutlined /> : <DashboardOutlined />}
+                  onClick={() => handleTestPrometheus(record.id)}
+                  disabled={testingPromId !== null || !record.prometheusUrl}
+                  style={{ color: record.prometheusUrl ? '#52c41a' : '#d9d9d9' }}
+                >
+                  监控
                 </Button>
                 <Button
                   size="small"

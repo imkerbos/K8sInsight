@@ -95,6 +95,7 @@ func NewRouter(
 		v1.PUT("/clusters/:id", permChecker.RequirePermission("cluster:write"), clusterHandler.Update)
 		v1.DELETE("/clusters/:id", permChecker.RequirePermission("cluster:write"), clusterHandler.Delete)
 		v1.POST("/clusters/:id/test", permChecker.RequirePermission("cluster:write"), clusterHandler.TestConnection)
+		v1.POST("/clusters/:id/test-prometheus", permChecker.RequirePermission("cluster:write"), clusterHandler.TestPrometheus)
 		v1.POST("/clusters/:id/activate", permChecker.RequirePermission("cluster:write"), clusterHandler.Activate)
 		v1.POST("/clusters/:id/deactivate", permChecker.RequirePermission("cluster:write"), clusterHandler.Deactivate)
 		v1.GET("/clusters/:id/metrics", permChecker.RequirePermission("cluster:read"), clusterHandler.Metrics)

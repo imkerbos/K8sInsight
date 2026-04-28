@@ -49,6 +49,16 @@ export async function testClusterConnection(id: string) {
   return data
 }
 
+export async function testPrometheusConnection(id: string) {
+  const { data } = await client.post<{
+    success: boolean
+    message?: string
+    error?: string
+    seriesCount?: number
+  }>(`/clusters/${id}/test-prometheus`)
+  return data
+}
+
 export type ClusterMetrics = {
   clusterId: string
   range: string

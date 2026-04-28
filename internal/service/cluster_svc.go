@@ -156,6 +156,86 @@ func (s *ClusterService) TestConnection(ctx context.Context, id string) (*TestCo
 	}, nil
 }
 
+// TestPrometheusResult Prometheus 连接测试结果
+type TestPrometheusResult struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message,omitempty"`
+	Error      string `json:"error,omitempty"`
+	SeriesCount int   `json:"seriesCount,omitempty"`
+}
+
+// TestPrometheus 测试集群的 Prometheus/VictoriaMetrics 连接
+func (s *ClusterService) TestPrometheus(ctx context.Context, id string) (*TestPrometheusResult, error) {
+	cl, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("集群未找到: %w", err)
+	}
+
+	promURL := strings.TrimSpace(cl.PrometheusURL)
+	if promURL == "" {
+		promURL = s.pipeline.GetPrometheusURL(ctx)
+	}
+	if promURL == "" {
+		return &TestPrometheusResult{Success: false, Error: "未配置 Prometheus 地址"}, nil
+	}
+
+	// 用一个简单的即时查询测试连通性
+	testQuery := "up"
+	extraLabels := strings.TrimSpace(cl.PrometheusLabels)
+	if extraLabels != "" {
+		testQuery = fmt.Sprintf("up{%s}", extraLabels)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	u, err := url.Parse(strings.TrimRight(promURL, "/") + "/api/v1/query")
+	if err != nil {
+		return &TestPrometheusResult{Success: false, Error: "地址格式错误: " + err.Error()}, nil
+	}
+	q := u.Query()
+	q.Set("query", testQuery)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(queryCtx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return &TestPrometheusResult{Success: false, Error: err.Error()}, nil
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return &TestPrometheusResult{Success: false, Error: "连接失败: " + err.Error()}, nil
+	}
+	defer resp.Body.Close()
+
+	var pr promResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
+		return &TestPrometheusResult{Success: false, Error: "响应解析失败: " + err.Error()}, nil
+	}
+
+	if resp.StatusCode >= 400 || pr.Status != "success" {
+		errMsg := pr.Error
+		if errMsg == "" {
+			errMsg = resp.Status
+		}
+		return &TestPrometheusResult{Success: false, Error: "查询失败: " + errMsg}, nil
+	}
+
+	seriesCount := len(pr.Data.Result)
+	msg := fmt.Sprintf("连接成功，查询到 %d 条时序数据", seriesCount)
+	if extraLabels != "" {
+		msg += fmt.Sprintf("（标签过滤: %s）", extraLabels)
+	}
+	if seriesCount == 0 && extraLabels != "" {
+		msg += "。注意：未匹配到数据，请检查标签过滤是否正确"
+	}
+
+	return &TestPrometheusResult{
+		Success:     true,
+		Message:     msg,
+		SeriesCount: seriesCount,
+	}, nil
+}
+
 // Activate 启用集群并启动管道
 func (s *ClusterService) Activate(ctx context.Context, id string) (*model.Cluster, error) {
 	cl, err := s.repo.FindByID(ctx, id)
@@ -224,10 +304,6 @@ func (s *ClusterService) GetMetrics(ctx context.Context, id string, rangeDur tim
 	}
 	if promURL == "" {
 		return nil, fmt.Errorf("未配置 Prometheus 地址，请在集群设置或 系统管理 → 资源采集 中配置")
-	}
-
-	if !s.pipeline.IsRunning(cl.ID) {
-		return nil, fmt.Errorf("集群管道未运行，请先启用集群")
 	}
 
 	end := time.Now()
