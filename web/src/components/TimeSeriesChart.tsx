@@ -40,7 +40,7 @@ export default function TimeSeriesChart({
   const times = samples.map((s) => dayjs.unix(s.ts).format('HH:mm:ss'))
   const values = samples.map((s) => s.value)
 
-  const series: any[] = [
+  const series: Record<string, unknown>[] = [
     {
       name: seriesLabel,
       type: 'line',
@@ -79,10 +79,10 @@ export default function TimeSeriesChart({
       backgroundColor: 'rgba(255,255,255,0.96)',
       borderColor: '#e8e8e8',
       textStyle: { color: '#333', fontSize: 12 },
-      formatter: (params: any[]) => {
+      formatter: (params: { axisValueLabel?: string; color?: string; seriesName?: string; value?: number }[]) => {
         const time = params[0]?.axisValueLabel || ''
         let html = `<div style="font-weight:600;margin-bottom:4px">${time}</div>`
-        params.forEach((p: any) => {
+        params.forEach((p) => {
           html += `<div style="display:flex;align-items:center;gap:6px">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
             <span>${p.seriesName}: <b>${fmtNumber(p.value)}</b> ${unit}</span>

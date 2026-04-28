@@ -6,11 +6,10 @@ import {
   ReloadOutlined,
   CloudServerOutlined,
 } from '@ant-design/icons'
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import ReactECharts from 'echarts-for-react'
 import dayjs from '../../utils/dayjs'
 import { getClusterMetrics, listClusters } from '../../api/clusters'
-import type { ClusterMetrics } from '../../api/clusters'
 import type { Cluster } from '../../types/cluster'
 import './monitor.css'
 
@@ -116,7 +115,6 @@ function buildLineOption(
 export default function ClusterMonitor() {
   const { id } = useParams<{ id: string }>()
   const [range, setRange] = useState('1h')
-  const refreshTimerRef = useRef<ReturnType<typeof setInterval>>()
 
   // 集群基础信息
   const { data: clusters } = useQuery({
@@ -148,13 +146,6 @@ export default function ClusterMonitor() {
   const handleRefresh = useCallback(() => {
     refetch()
   }, [refetch])
-
-  // 清除旧定时器
-  useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
-    }
-  }, [])
 
   // 提取数据
   const cpu = useMemo(() => toChartData(metrics?.series?.cpu_usage), [metrics])
