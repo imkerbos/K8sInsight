@@ -29,7 +29,7 @@ func collectMetrics(
 
 	// 配置了 Prometheus 时优先查询 Prometheus
 	if strings.TrimSpace(cfg.PrometheusURL) != "" {
-		content, pErr := CollectPrometheusRange(ctx, cfg.PrometheusURL, cfg.PromQueryRange, event)
+		content, pErr := CollectPrometheusRange(ctx, cfg.PrometheusURL, cfg.PromQueryRange, event, cfg.PrometheusLabels)
 		if pErr == nil {
 			return Evidence{
 				Type:      EvidenceMetrics,
@@ -115,6 +115,7 @@ func CollectPrometheusRange(
 	baseURL string,
 	rangeDur time.Duration,
 	event detector.AnomalyEvent,
+	extraLabels ...string,
 ) (string, error) {
 	if rangeDur <= 0 {
 		rangeDur = 10 * time.Minute
@@ -127,13 +128,19 @@ func CollectPrometheusRange(
 	start := end.Add(-rangeDur)
 	step := "15s"
 
+	// 构建标签过滤：namespace + pod + 集群级别 extraLabels
+	labelFilter := fmt.Sprintf(`namespace="%s",pod="%s"`, event.Namespace, event.PodName)
+	if len(extraLabels) > 0 && strings.TrimSpace(extraLabels[0]) != "" {
+		labelFilter += "," + strings.TrimSpace(extraLabels[0])
+	}
+
 	memQuery := fmt.Sprintf(
-		`sum(container_memory_working_set_bytes{namespace="%s",pod="%s"}) by (pod)`,
-		event.Namespace, event.PodName,
+		`sum(container_memory_working_set_bytes{%s}) by (pod)`,
+		labelFilter,
 	)
 	cpuQuery := fmt.Sprintf(
-		`sum(rate(container_cpu_usage_seconds_total{namespace="%s",pod="%s"}[1m])) by (pod)`,
-		event.Namespace, event.PodName,
+		`sum(rate(container_cpu_usage_seconds_total{%s}[1m])) by (pod)`,
+		labelFilter,
 	)
 
 	memSeries, err := queryPrometheusRange(ctx, baseURL, memQuery, start, end, step)

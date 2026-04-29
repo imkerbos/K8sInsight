@@ -60,11 +60,12 @@ type AggregationConfig struct {
 
 // CollectConfig 证据采集配置
 type CollectConfig struct {
-	LogTailLines   int           `mapstructure:"logTailLines"`
-	TimeoutPerItem time.Duration `mapstructure:"timeoutPerItem"`
-	EnableMetrics  bool          `mapstructure:"enableMetrics"`
-	PrometheusURL  string        `mapstructure:"prometheusURL"`
-	PromQueryRange time.Duration `mapstructure:"promQueryRange"`
+	LogTailLines     int           `mapstructure:"logTailLines"`
+	TimeoutPerItem   time.Duration `mapstructure:"timeoutPerItem"`
+	EnableMetrics    bool          `mapstructure:"enableMetrics"`
+	PrometheusURL    string        `mapstructure:"prometheusURL"`
+	PrometheusLabels string        `mapstructure:"prometheusLabels"` // 集群级别的额外 PromQL 标签过滤
+	PromQueryRange   time.Duration `mapstructure:"promQueryRange"`
 }
 
 // DBConfig 数据库配置

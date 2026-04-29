@@ -111,7 +111,19 @@ func (m *Manager) StartCluster(ctx context.Context, cluster *model.Cluster) erro
 	det.SetClusterID(cluster.ID)
 
 	col := collector.NewCollector(clientset, m.cfg.Collect, evidenceCh, m.logger)
-	col.SetConfigLoader(m.loadCollectConfig)
+	// 注入集群级别的 Prometheus 配置（URL + 标签过滤）
+	clusterPromURL := strings.TrimSpace(cluster.PrometheusURL)
+	clusterPromLabels := strings.TrimSpace(cluster.PrometheusLabels)
+	col.SetConfigLoader(func(ctx context.Context) config.CollectConfig {
+		cfg := m.loadCollectConfig(ctx)
+		if clusterPromURL != "" {
+			cfg.PrometheusURL = clusterPromURL
+		}
+		if clusterPromLabels != "" {
+			cfg.PrometheusLabels = clusterPromLabels
+		}
+		return cfg
+	})
 
 	// 去重索引 + Incident 管理器
 	dedupIdx := dedup.NewIndex(10000)

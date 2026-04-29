@@ -22,6 +22,7 @@ type IncidentService struct {
 	repo         repository.IncidentRepository
 	evidenceRepo repository.EvidenceRepository
 	settingRepo  repository.SettingRepository
+	clusterRepo  repository.ClusterRepository
 	logger       *zap.Logger
 }
 
@@ -30,12 +31,14 @@ func NewIncidentService(
 	repo repository.IncidentRepository,
 	evidenceRepo repository.EvidenceRepository,
 	settingRepo repository.SettingRepository,
+	clusterRepo repository.ClusterRepository,
 	logger *zap.Logger,
 ) *IncidentService {
 	return &IncidentService{
 		repo:         repo,
 		evidenceRepo: evidenceRepo,
 		settingRepo:  settingRepo,
+		clusterRepo:  clusterRepo,
 		logger:       logger.Named("svc.incident"),
 	}
 }
@@ -75,6 +78,17 @@ func (s *IncidentService) RecollectMetrics(ctx context.Context, incidentID strin
 		return nil, err
 	}
 
+	// 如果事件关联了集群，优先使用集群级别的 Prometheus 配置
+	var extraLabels string
+	if incident.ClusterID != nil && *incident.ClusterID != "" && s.clusterRepo != nil {
+		if cl, clErr := s.clusterRepo.FindByID(ctx, *incident.ClusterID); clErr == nil {
+			if u := strings.TrimSpace(cl.PrometheusURL); u != "" {
+				promURL = u
+			}
+			extraLabels = strings.TrimSpace(cl.PrometheusLabels)
+		}
+	}
+
 	eventTs := incident.LastSeen
 	if eventTs.IsZero() {
 		eventTs = incident.FirstSeen
@@ -93,7 +107,7 @@ func (s *IncidentService) RecollectMetrics(ctx context.Context, incidentID strin
 	queryCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 
-	content, err := collector.CollectPrometheusRange(queryCtx, promURL, promQueryRange, event)
+	content, err := collector.CollectPrometheusRange(queryCtx, promURL, promQueryRange, event, extraLabels)
 	if err != nil {
 		return nil, fmt.Errorf("Prometheus 补采失败: %w", err)
 	}

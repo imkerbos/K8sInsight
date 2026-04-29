@@ -120,7 +120,7 @@ func main() {
 	retentionJob.Start(ctx)
 
 	// 初始化 Service 层
-	incidentSvc := service.NewIncidentService(incidentRepo, evidenceRepo, settingRepo, logger)
+	incidentSvc := service.NewIncidentService(incidentRepo, evidenceRepo, settingRepo, clusterRepo, logger)
 	clusterSvc := service.NewClusterService(clusterRepo, clusterMgr, logger)
 
 	// 启动 HTTP 服务
